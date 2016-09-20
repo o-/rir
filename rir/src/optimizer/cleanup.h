@@ -55,7 +55,7 @@ class BCCleanupA : public ForwardAnalysisIns<AbstractStack<BCCleanupV>>,
     BCCleanupA() : dispatcher_(*this) {}
 
   protected:
-    virtual Dispatcher& dispatcher() { return dispatcher_; }
+    virtual Dispatcher& dispatcher() override { return dispatcher_; }
 
     void push_(CodeEditor::Cursor ins) override {
         current().push(BCCleanupV(ins));
