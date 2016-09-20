@@ -51,8 +51,6 @@ protected:
     virtual void doAnalyze() = 0;
 
     CodeEditor * code_ = nullptr;
-
-
 };
 
 
@@ -82,6 +80,8 @@ public:
     }
 
 protected:
+  CodeEditor* code() { return code_; }
+
     ForwardAnalysis():
         cfReceiver_(*this),
         cfDispatcher_(cfReceiver_) {
@@ -97,10 +97,21 @@ protected:
         return new ASTATE();
     }
 
+    virtual void resetState() {
+        delete currentState_;
+        currentState_ = initialState_->clone();
+    }
+
+    void loadState(Label l) { currentState_ = mergePoints_[l]->clone(); }
+
+    ASTATE const& finalState() {
+        return *reinterpret_cast<ASTATE*>(finalState_);
+    }
+
     void doAnalyze() override {
         mergePoints_.resize(code_->numLabels());
         initialState_ = initialState();
-        currentState_ = initialState_->clone();
+        this->resetState();
         q_.push_front(code_->getCursor());
         Dispatcher & d = dispatcher();
         while (not q_.empty()) {
@@ -145,14 +156,12 @@ protected:
         }
     }
 
+  private:
     State * initialState_ = nullptr;
     State * currentState_ = nullptr;
     State * finalState_ = nullptr;
     CodeEditor::Cursor currentIns_;
     std::vector<State *> mergePoints_;
-
-
-private:
 
     class ControlFlowReceiver : public ControlFlowDispatcher::Receiver {
     public:
@@ -182,17 +191,11 @@ private:
         }
     }
 
-
-
-
     std::deque<CodeEditor::Cursor> q_;
     bool stopCurrentSequence_;
 
     ControlFlowReceiver cfReceiver_;
     ControlFlowDispatcher cfDispatcher_;
-
-
-
 };
 
 template<typename ASTATE>
@@ -231,81 +234,68 @@ void ForwardAnalysis<ASTATE>::ControlFlowReceiver::label(CodeEditor::Cursor at) 
     // do nothing and be happy
 }
 
-
-
-
-
+// TODO: why do we need this?
 template<typename ASTATE>
 class ForwardAnalysisFinal : public ForwardAnalysis<ASTATE> {
-    using ForwardAnalysis<ASTATE>::finalState_;
 public:
-    ASTATE const & finalState() {
-        return * reinterpret_cast<ASTATE *>(finalState_);
-    }
+  using ForwardAnalysis<ASTATE>::finalState;
 };
 
 template<typename ASTATE>
 class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
-    using ForwardAnalysis<ASTATE>::currentIns_;
-    using ForwardAnalysis<ASTATE>::currentState_;
-    using ForwardAnalysis<ASTATE>::initialState_;
-    using ForwardAnalysis<ASTATE>::dispatcher;
-    using ForwardAnalysis<ASTATE>::mergePoints_;
-protected:
-    using ForwardAnalysis<ASTATE>::current;
-    using ForwardAnalysis<ASTATE>::code_;
-public:
+    CodeEditor::Cursor position_;
 
-    ASTATE const & operator [] (CodeEditor::Cursor const & ins) {
-        assert(ins.belongs(code_) and
+  public:
+    ASTATE const& operator[](CodeEditor::Cursor ins) {
+        assert(ins.belongs(this->code()) and
                "you can only use cursors from the same editor");
-        if (ins != currentIns_)
+        if (ins != position_)
             seek(ins);
         return current();
     }
 
 protected:
+  using ForwardAnalysis<ASTATE>::current;
+  using ForwardAnalysis<ASTATE>::dispatcher;
+  using ForwardAnalysis<ASTATE>::resetState;
+  using ForwardAnalysis<ASTATE>::loadState;
 
     void doAnalyze() override {
         ForwardAnalysis<ASTATE>::doAnalyze();
-        initializeCache();
+        resetState();
     }
 
-    void initializeCache() {
-        currentState_ = initialState_->clone();
-        currentIns_ = code_->getCursor();
-    }
-
-    void advance() {
-        dispatcher().dispatch(currentIns_);
-        currentIns_.advance();
-        // if the cached instruction is label, dispose of the state and create a copy of the fixpoint
-        if (currentIns_.bc().bc == BC_t::label) {
-            delete currentState_;
-            currentState_ = mergePoints_[currentIns_.bc().immediate.offset]->clone();
-        }
+    void resetState() override {
+        ForwardAnalysis<ASTATE>::resetState();
+        position_ = this->code()->getCursor();
     }
 
     void seek(CodeEditor::Cursor ins) {
-        CodeEditor::Cursor end = ins.seekEnd();
-        while (currentIns_ != end) {
-            if (currentIns_ == ins)
-                return;
-            // advance the state using dispatcher
-            advance();
+        std::cout << "seeking to ";
+        ins.bc().print();
+
+        if (position_ == ins)
+            return;
+
+        for (int i = 0; i < 2; ++i) {
+            while (!position_.atEnd()) {
+
+                // advance the state
+                dispatcher().dispatch(position_);
+                position_.advance();
+                if (position_.bc().bc == BC_t::label)
+                    loadState(position_.bc().immediate.offset);
+
+                if (position_ == ins)
+                    return;
+            }
+
+            // if we haven't found it, let's start over
+            resetState();
         }
-        // if we haven't found it, let's start over
-        initializeCache();
-        while (currentIns_!= end) {
-            if (currentIns_ == ins)
-                return;
-            advance();
-        }
+
         assert(false and "not reachable");
     }
-
-
-
 };
 
 

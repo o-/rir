@@ -43,7 +43,7 @@ private:
 
       Must be implemented in children.
      */
-    virtual void doDispatch(CodeEditor::Cursor & ins) = 0;
+  virtual void doDispatch(CodeEditor::Cursor ins) = 0;
 
     bool success_;
 };
@@ -66,10 +66,10 @@ public:
 
     ControlFlowDispatcher(Receiver & receiver):
         receiver_(receiver) {
-   }
+    }
 
 private:
-    void doDispatch(CodeEditor::Cursor & ins) override {
+    void doDispatch(CodeEditor::Cursor ins) override {
         BC cur = ins.bc();
         switch (cur.bc) {
             case BC_t::brtrue_:

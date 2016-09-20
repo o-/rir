@@ -55,10 +55,7 @@ class CodeEditor {
                    std::hash<unsigned long>()((unsigned long)pos);
         }
 
-        Cursor():
-            editor(nullptr),
-            pos(nullptr) {
-        }
+        Cursor() : editor(nullptr), pos(nullptr) {}
 
         bool belongs(CodeEditor* c) const { return editor == c; }
 
@@ -88,20 +85,18 @@ class CodeEditor {
 
         bool firstInstruction() { return *this == editor->getCursor(); }
 
-        void operator++() {
-            assert(!atEnd());
-            pos = pos->next;
-        }
+        void operator++() { this->advance(); }
 
-        Cursor & advance() {
+        void advance() {
             assert(!atEnd());
             pos = pos->next;
-            return *this;
         }
 
         Cursor next() {
             assert(!atEnd());
-            return Cursor(*this).advance();
+            Cursor copy(*this);
+            copy.advance();
+            return copy;
         }
 
         void operator--() {
