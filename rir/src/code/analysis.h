@@ -257,7 +257,8 @@ protected:
 public:
 
     ASTATE const & operator [] (CodeEditor::Cursor const & ins) {
-        assert(& ins.editorX() == code_ and "you can only use cursors from the same editor");
+        assert(ins.belongs(code_) and
+               "you can only use cursors from the same editor");
         if (ins != currentIns_)
             seek(ins);
         return current();
@@ -280,7 +281,7 @@ protected:
     }
 
     void seek(CodeEditor::Cursor ins) {
-        CodeEditor::Cursor end = ins.editorX().getCursorAtEnd();
+        CodeEditor::Cursor end = ins.seekEnd();
         while (currentIns_ != end) {
             if (currentIns_ == ins)
                 return;

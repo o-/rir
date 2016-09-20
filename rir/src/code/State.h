@@ -101,13 +101,20 @@ public:
         return result;
     }
 
+    const AVALUE& top() const { return stack_.front(); }
+
     void pop(size_t num) {
         assert(stack_.size() >= num);
-        for (size_t i = 0; i != num; ++i)
+        for (size_t i = 0; i != num; ++i) {
+            std::cout << "po"
+                      << "\n";
             stack_.pop_front();
+        }
     }
 
     void push(AVALUE value) {
+        std::cout << "pu"
+                  << "\n";
         stack_.push_front(value);
     }
 

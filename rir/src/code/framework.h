@@ -74,10 +74,10 @@ private:
         switch (cur.bc) {
             case BC_t::brtrue_:
             case BC_t::brfalse_:
-                receiver_.conditionalJump(ins.editorX().label(cur.immediate.offset));
+                receiver_.conditionalJump(ins.seek(cur.immediate.offset));
                 break;
             case BC_t::br_:
-                receiver_.jump(ins.editorX().label(cur.immediate.offset));
+                receiver_.jump(ins.seek(cur.immediate.offset));
                 break;
             case BC_t::ret_:
             case BC_t::return_:

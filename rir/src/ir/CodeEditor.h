@@ -46,20 +46,25 @@ class CodeEditor {
   public:
 
     class Cursor {
-
         CodeEditor* editor;
         BytecodeList* pos;
 
       public:
+        unsigned long hash() const {
+            return std::hash<unsigned long>()((unsigned long)editor) ^
+                   std::hash<unsigned long>()((unsigned long)pos);
+        }
 
         Cursor():
             editor(nullptr),
             pos(nullptr) {
         }
 
-        CodeEditor & editorX() const {
-            return *editor;
-        }
+        bool belongs(CodeEditor* c) const { return editor == c; }
+
+        Cursor seek(Label l) { return editor->label(l); }
+
+        Cursor seekEnd() { return editor->getCursorAtEnd(); }
 
         Cursor(CodeEditor* editor, BytecodeList* pos)
             : editor(editor), pos(pos) {}
@@ -328,4 +333,12 @@ class CodeEditor {
 };
 }
 
+namespace std {
+template <>
+struct hash<rir::CodeEditor::Cursor> {
+    size_t operator()(rir::CodeEditor::Cursor const& x) const noexcept {
+        return x.hash();
+    }
+};
+}
 #endif

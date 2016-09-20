@@ -10,6 +10,7 @@
 
 #include "Optimizer.h"
 #include "utils/Pool.h"
+#include "optimizer/cleanup.h"
 
 #include "CodeVerifier.h"
 
@@ -1013,7 +1014,12 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    FunctionHandle opt = Optimizer::optimize(function);
+    CodeEditor c(function.entryPoint());
+    BCCleanup cleanup(c);
+    cleanup.run();
+
+    auto opt = c.finalize();
+    // FunctionHandle opt = Optimizer::optimize(function);
     // opt.print();
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
