@@ -16,11 +16,11 @@ class BCCleanup : public InstructionVisitor::Receiver {
     class NoSideeffect : public InstructionVisitor::Receiver {
       public:
         bool ans = false;
-        void push_(CodeEditor::Cursor ins) override { ans = true; }
-        void dup_(CodeEditor::Cursor ins) override { ans = true; }
+        void push_(CodeEditor::Cursor& ins) override { ans = true; }
+        void dup_(CodeEditor::Cursor& ins) override { ans = true; }
     };
 
-    void pop_(CodeEditor::Cursor ins) override {
+    void pop_(CodeEditor::Cursor& ins) override {
         auto v = analysis[ins].top();
         if (v.uses.empty() && v.defs.size() == 1) {
             for (auto def : v.defs) {
@@ -28,8 +28,8 @@ class BCCleanup : public InstructionVisitor::Receiver {
                 InstructionVisitor noSideeffectD(noSideeffect);
                 noSideeffectD.dispatch(def);
                 if (noSideeffect.ans) {
-                    def.remove();
-                    ins.remove();
+                    def.erase();
+                    ins.erase();
                 }
             }
         }

@@ -8,7 +8,6 @@
 #include "R/Sexp.h"
 #include "R/Symbols.h"
 
-#include "Optimizer.h"
 #include "utils/Pool.h"
 #include "optimizer/cleanup.h"
 

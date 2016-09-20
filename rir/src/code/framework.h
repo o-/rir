@@ -20,7 +20,7 @@ public:
 
     /** Dispatches on the given cursor, and returns true if the dispatch was successful, false if not.
      */
-    bool dispatch(CodeEditor::Cursor & ins) {
+    bool dispatch(CodeEditor::Cursor& ins) {
         success_ = true;
         doDispatch(ins);
         return success_;
@@ -43,7 +43,7 @@ private:
 
       Must be implemented in children.
      */
-  virtual void doDispatch(CodeEditor::Cursor ins) = 0;
+  virtual void doDispatch(CodeEditor::Cursor& ins) = 0;
 
     bool success_;
 };
@@ -74,10 +74,12 @@ private:
         switch (cur.bc) {
             case BC_t::brtrue_:
             case BC_t::brfalse_:
-                receiver_.conditionalJump(ins.seek(cur.immediate.offset));
+                ins.seek(cur.immediate.offset);
+                receiver_.conditionalJump(ins);
                 break;
             case BC_t::br_:
-                receiver_.jump(ins.seek(cur.immediate.offset));
+                ins.seek(cur.immediate.offset);
+                receiver_.jump(ins);
                 break;
             case BC_t::ret_:
             case BC_t::return_:
@@ -88,7 +90,7 @@ private:
         }
     }
 
-    Receiver & receiver_;
+    Receiver& receiver_;
 };
 
 }

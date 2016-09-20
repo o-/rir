@@ -165,13 +165,13 @@ protected:
 
     class ControlFlowReceiver : public ControlFlowDispatcher::Receiver {
     public:
-        void jump(CodeEditor::Cursor target);
+        void jump(CodeEditor::Cursor& target);
 
-        void conditionalJump(CodeEditor::Cursor target);
+        void conditionalJump(CodeEditor::Cursor& target);
 
-        void terminator(CodeEditor::Cursor at);
+        void terminator(CodeEditor::Cursor& at);
 
-        void label(CodeEditor::Cursor at);
+        void label(CodeEditor::Cursor& at);
 
         ControlFlowReceiver(ForwardAnalysis & driver):
             a_(driver) {
@@ -199,7 +199,7 @@ protected:
 };
 
 template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor target) {
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor& target) {
     if (a_.shouldJump(target.bc().immediate.offset)) {
         a_.q_.push_front(target);
         delete a_.currentState_;
@@ -209,7 +209,8 @@ void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor targe
 }
 
 template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor target) {
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor& target) {
+    std::cout << "jump to " << target.bc().immediate.offset << "\n";
     if (a_.shouldJump(target.bc().immediate.offset)) {
         a_.q_.push_front(target);
     }
@@ -218,7 +219,7 @@ void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::C
 }
 
 template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::terminator(CodeEditor::Cursor at) {
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::terminator(CodeEditor::Cursor& at) {
     if (a_.finalState_ == nullptr) {
         a_.finalState_ = a_.currentState_;
     } else {
@@ -230,7 +231,7 @@ void ForwardAnalysis<ASTATE>::ControlFlowReceiver::terminator(CodeEditor::Cursor
 }
 
 template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::label(CodeEditor::Cursor at) {
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::label(CodeEditor::Cursor& at) {
     // do nothing and be happy
 }
 
@@ -271,9 +272,6 @@ protected:
     }
 
     void seek(CodeEditor::Cursor ins) {
-        std::cout << "seeking to ";
-        ins.bc().print();
-
         if (position_ == ins)
             return;
 

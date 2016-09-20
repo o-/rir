@@ -48,6 +48,7 @@ class CodeEditor {
     class Cursor {
         CodeEditor* editor;
         BytecodeList* pos;
+        std::vector<BytecodeList*> deleted;
 
       public:
         unsigned long hash() const {
@@ -56,19 +57,17 @@ class CodeEditor {
         }
 
         Cursor() : editor(nullptr), pos(nullptr) {}
+        Cursor(const Cursor & other) : editor(other.editor), pos(other.pos) {}
+        Cursor(CodeEditor* editor, BytecodeList* pos) : editor(editor), pos(pos) {}
+        ~Cursor() {
+            for (auto d : deleted)
+                delete d;
+        }
 
         bool belongs(CodeEditor* c) const { return editor == c; }
 
-        Cursor seek(Label l) { return editor->label(l); }
-
-        Cursor seekEnd() { return editor->getCursorAtEnd(); }
-
-        Cursor(CodeEditor* editor, BytecodeList* pos)
-            : editor(editor), pos(pos) {}
-
-        Cursor(Cursor const & from):
-            editor(from.editor),
-            pos(from.pos) {
+        void seek(Label l) {
+            pos = editor->labels_[l];
         }
 
         bool operator == (Cursor const & other) const {
@@ -81,22 +80,21 @@ class CodeEditor {
 
         Label mkLabel() { return editor->nextLabel++; }
 
-        bool atEnd() { return *this == editor->getCursorAtEnd(); }
+        bool atEnd() { return pos == &editor->last; }
 
-        bool firstInstruction() { return *this == editor->getCursor(); }
+        bool firstInstruction() { return pos == editor->front.next; }
 
         void operator++() { this->advance(); }
 
-        void advance() {
+        Cursor& advance() {
             assert(!atEnd());
             pos = pos->next;
+            return *this;
         }
 
         Cursor next() {
-            assert(!atEnd());
-            Cursor copy(*this);
-            copy.advance();
-            return copy;
+            Cursor c = *this;
+            return c.advance();
         }
 
         void operator--() {
@@ -232,8 +230,10 @@ class CodeEditor {
             pos->src = ast;
         }
 
-        void remove() {
+        void erase() {
             editor->changed = true;
+
+            assert(pos->bc.bc != BC_t::invalid_);
 
             assert(!atEnd());
             assert(pos != & editor->front);
@@ -244,8 +244,9 @@ class CodeEditor {
             prev->next = next;
             next->prev = prev;
 
-            delete pos;
-            pos = next;
+            pos->bc.bc = BC_t::invalid_;
+
+            deleted.push_back(pos);
         }
 
         bool empty() { return editor->front.next == & editor->last; }
@@ -256,10 +257,6 @@ class CodeEditor {
 
     Cursor getCursor() {
         return Cursor(this, front.next);
-    }
-
-    Cursor getCursorAtEnd() {
-        return Cursor(this, & last);
     }
 
     CodeEditor(SEXP closure);
@@ -290,21 +287,12 @@ class CodeEditor {
 
     FunctionHandle finalize();
 
-    void normalizeReturn();
-
     void print();
 
     CodeEditor* detachPromise(fun_idx_t idx) {
         CodeEditor* e = promises[idx];
         promises[idx] = nullptr;
         return e;
-    }
-
-    /** Returns cursor that points to given label.
-     */
-    Cursor label(size_t index) {
-        assert (index < labels_.size());
-        return Cursor(this, labels_[index]);
     }
 
     /** Returns number of labels in the code.
