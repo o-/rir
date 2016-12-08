@@ -331,7 +331,7 @@ protected:
 class DummyState {
   public:
     bool mergeWith(DummyState const* other) { return false; }
-    void print() {}
+    void print() const {}
 };
 
 /** This could be done with multiple virtual inheritance, but the composition is simpler, and perhaps even cleaner, albeit more lengthy.
