@@ -17,6 +17,7 @@
 #include "code/analysis.h"
 #include "optimizer/cp.h"
 #include "optimizer/Signature.h"
+#include "optimizer/liveness.h"
 
 #include "ir/Optimizer.h"
 
@@ -198,6 +199,21 @@ REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
     unsigned ofs = (unsigned)INTEGER(offset)[0];
     ::Code * c = codeAt((Function*)INTEGER(function), ofs);
     return evalRirCode(c, globalContext(), env, 0);
+}
+
+
+
+REXPORT SEXP rir_analyze_liveness(SEXP what) {
+    printf("Liveness analysis of %p\n", what);
+    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    if (f == nullptr)
+        Rf_error("Not a rir compiled code");
+    // CodeEditor(what).print();
+    CodeEditor ce(what);
+    LivenessAnalysis la;
+    la.analyze(ce);
+    la.finalState().print();
+    return R_NilValue;
 }
 
 // startup ---------------------------------------------------------------------

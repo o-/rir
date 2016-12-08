@@ -59,3 +59,10 @@ rir.analysis.signature <- function(f) {
     names(result) <- x[[2]]
     result
 }
+
+
+
+# liveness analysis
+rir.analyze_liveness <- function(what) {
+    .Call("rir_analyze_liveness", what)
+}
