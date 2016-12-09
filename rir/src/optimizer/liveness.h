@@ -12,37 +12,44 @@ namespace rir {
 
 
 /** Our abstract value.
+ *
+ * Liveness analysis uses powerset lattice, the elements being the variables of the analyzed function.
+ * At all points in the function we have one abstract value which tells the set of variables that are
+ * live at that point, i.e. their values are read by someone later.
  */
 
 class ASet {
 public:
 
-    ASet(ASet const & other)  = default;
+    ASet() = default;
+    ASet(ASet const & other) = default;
 
-    static ASet const & Absent() { return top(); }
+    static ASet const & Absent() { return bottom(); }
 
     bool mergeWith(ASet const & other) {
-        bool result = false;
-        assert(false && "Not yet implemented.");
-        return result;
+        // This is just set union
+
+        auto originalSize = variables.size();
+
+        for (auto const & var : other.variables) {
+            variables.insert(var);
+        }
+
+        return originalSize != variables.size();
     }
 
-    // TODO constructors
-    ASet() = default;
-
-    static ASet const & top() {
-        assert(false && "Not yet implemented.");
-        static ASet value;
-        return value;
-    }
-
+    // Bottom is empty set
     static ASet const & bottom() {
         static ASet value;
         return value;
     }
 
     void print() const {
-        assert(false && "Not yet implemented.");
+        Rprintf("{ ");
+        for (auto const & var : variables) {
+            Rprintf("%s ", var.c_str());
+        }
+        Rprintf("}");
     }
 
     std::unordered_set<std::string> variables;
@@ -59,14 +66,33 @@ protected:
 
     AbstractState<ASet> * initialState() override {
         auto * result = new AbstractState<ASet>();
+        // No instructions use stack, we only have one abstract value stored here
+        result->push(ASet::bottom());
         return result;
     }
 
-    void any(CodeEditor::Iterator ins) override {
-       assert(false && "Not yet implemented.");
+    void ldarg_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().top().variables.insert(CHAR(PRINTNAME((bc.immediateConst()))));
     }
 
-    // TODO more instructions...
+    void ldvar_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().top().variables.insert(CHAR(PRINTNAME((bc.immediateConst()))));
+    }
+
+    void stvar_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().top().variables.erase(CHAR(PRINTNAME((bc.immediateConst()))));
+    }
+
+    void ret_(CodeEditor::Iterator ins) override {
+    }
+
+    void return_(CodeEditor::Iterator ins) override {
+    }
+
+    void any(CodeEditor::Iterator ins) override {}
 
     Dispatcher & dispatcher() override {
         return dispatcher_;
