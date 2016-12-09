@@ -379,24 +379,24 @@ class BackwardAnalysis : public Analysis {
                 // add jumps, terminate finished branches
                 if (isBasicBlockStart(currentIns_)) {
 
-                    // possible multiple paths lead to this instruction
+                    // possibly multiple paths lead to this instruction
                     if (cur.is(BC_t::label)) {
 
-                        // prev is unconditional jump -> terminate branch
-
-
                         // merge all origin points to this label and continue to prev
-
-                        for (auto& o : jumpOrigins_[cur.immediate.offset]) {
-
-
-
-
+                        for (auto& origin : jumpOrigins_[cur.immediate.offset]) {
+                            if (shouldFollowJumpFrom(origin)) {
+                                q_.push_front(origin);
+                            }
                         }
 
-
-
-
+                        // if prev is unconditional jump elswhere, terminate branch
+                        BC prev = *(currentIns_ - 1);
+                        if (prev.is(BC_t::br_) && code_->target(prev) != currentIns_) {
+                            // all origins already in q_
+                            delete currentState_;
+                            currentState_ = nullptr;
+                            break;
+                        }
                     }
 
                     // else: had to come from previous instruction
@@ -406,22 +406,6 @@ class BackwardAnalysis : public Analysis {
                 }
 
                 // FIXME: sequences JUMP + LABEL cause merge twice... !
-
-                if (cur.is(BC_t::br_)) {
-                    Label l = cur.immediate.offset;
-                    if (shouldJump(l)) {
-                        q_.push_front(code_->target(cur));
-                    }
-                    delete currentState_;
-                    currentState_ = nullptr;
-                    break;
-                } else if (cur.isJmp()) {
-                    Label l = cur.immediate.offset;
-                    if (shouldJump(l)) {
-                        q_.push_front(code_->target(cur));
-                    }
-                }
-
 
                 // move to the previous instruction
                 --currentIns_;
@@ -438,8 +422,8 @@ class BackwardAnalysis : public Analysis {
 
 
 private:
-    bool shouldJump(size_t label) {
-        State * & stored = mergePoints_[label];
+    bool shouldFollowJumpFrom(CodeEditor::Iterator ins) {
+        State * & stored = mergePoints_[ins];  // first call to [] initializes to nullptr
         if (stored == nullptr) {
             stored = currentState_->clone();
             return true;
