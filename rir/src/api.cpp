@@ -214,30 +214,21 @@ REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
 
 REXPORT SEXP rir_analyze_liveness(SEXP what) {
 
-    Rprintf("[-----------------------------------------------]\n"
-            "| Liveness analysis of %p\n"
-            "[-----------------------------------------------]\n", what);
+    Rprintf("--- Liveness analysis of %p ---\n", what);
 
     ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
 
     CodeEditor ce(what);
-
-    Rprintf("| Disassembly:\n"
-            "[-----------------------------------------------]\n");
-    ce.print(false);
+//    ce.print(false);
 
     LivenessAnalysis la;
     la.analyze(ce);
 
-
-    Rprintf("[-----------------------------------------------]\n"
-            "| Analysis:\n"
-            "[-----------------------------------------------]\n");
-    la.finalState().print();
-
-    Rprintf("\n[-----------------------------------------------]\n");
+    Rprintf("Live at the beginning: ");
+    la.finalState().stack().top().print();
+    Rprintf("\n");
 
     return R_NilValue;
 }

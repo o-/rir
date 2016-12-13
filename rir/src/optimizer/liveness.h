@@ -52,6 +52,8 @@ public:
         Rprintf("}");
     }
 
+    // as of now, store names of variables as strings...
+    // maybe change to ints?
     std::unordered_set<std::string> variables;
 
 };
