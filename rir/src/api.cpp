@@ -76,7 +76,7 @@ REXPORT SEXP rir_isValidFunction(SEXP what) {
  */
 REXPORT SEXP rir_disassemble(SEXP what) {
 
-    printf("%p\n", what);
+    Rprintf("%p\n", what);
     ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
 
     if (f == nullptr)
@@ -114,6 +114,15 @@ REXPORT SEXP rir_compile(SEXP what) {
         auto res = Compiler::compileExpression(what);
         return rir_createWrapperAst(res.bc);
     }
+}
+
+REXPORT SEXP rir_markOptimize(SEXP what) {
+    assert(TYPEOF(what) == CLOSXP);
+    SEXP b = BODY(what);
+    isValidFunctionSEXP(b);
+    Function* fun = (Function*)INTEGER(b);
+    fun->markOpt = true;
+    return R_NilValue;
 }
 
 REXPORT SEXP rir_jitDisable(SEXP expression) {

@@ -456,7 +456,8 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     if (!optimizing && !fun->next) {
         Code* code = functionCode(fun);
-        if ((fun->invocationCount == 1 && code->perfCounter > 100) ||
+        if (fun->markOpt ||
+            (fun->invocationCount == 1 && code->perfCounter > 100) ||
             (fun->invocationCount == 10 && code->perfCounter > 20) ||
             fun->invocationCount == 100) {
             optimizing = true;
@@ -553,10 +554,10 @@ void warnSpecial(SEXP callee, SEXP call) {
 
     return;
     if (((sexprec_rjit*)callee)->u.i == 26) {
-        printf("warning: calling special: .Internal(%s\n",
+        Rprintf("warning: calling special: .Internal(%s\n",
                 CHAR(PRINTNAME(CAR(CADR(call)))));
     } else {
-        printf("warning: calling special: %s\n",
+        Rprintf("warning: calling special: %s\n",
                 R_FunTab[((sexprec_rjit*)callee)->u.i].name);
     }
 }
