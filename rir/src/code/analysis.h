@@ -470,30 +470,36 @@ private:
 
     void computeBackwardCF() {
         // find for all labels the jumps that target them
-        // also add all returns to the working list
+        // also add all exit points to the working list
 
         jumpOrigins_.resize(code_->numLabels());
 
         int mpCount = 0;
 
+        bool dead = false;
         auto it = code_->begin(), end = code_->end();
         while (it != end) {
             BC ins = *it;
 
-            // remember jump targets
-            if (ins.isJmp()) {
-                Label l = ins.immediate.offset;
-                jumpOrigins_[l].push_back(it);
-            }
+            if (ins.is(BC_t::label)) dead = false;
 
-            // count merge points
-            if (isBasicBlockEnd(it)) {
-                ++mpCount;
-            }
+            if (!dead) {
+                // remember jump targets
+                if (ins.isJmp()) {
+                    Label l = ins.immediate.offset;
+                    jumpOrigins_[l].push_back(it);
+                }
 
-            // add entry point to working list
-            if (ins.isReturn()) {
-                q_.push_front(it);
+                // count merge points
+                if (isBasicBlockEnd(it)) {
+                    ++mpCount;
+                }
+
+                // add entry point to working list
+                if (ins.isReturn()) {
+                    q_.push_front(it);
+                    dead = true;
+                }
             }
 
             ++it;
