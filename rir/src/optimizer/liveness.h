@@ -96,6 +96,11 @@ public:
         state.variables.insert(e);
     }
     
+    void erase(SEXP e)
+    {
+        state.variables.erase(e);
+    }
+    
 private:
     
     AVALUE state;
@@ -128,7 +133,7 @@ protected:
 
     void stvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().insert(bc.immediateConst());
+        current().erase(bc.immediateConst());
     }
 
     void ret_(CodeEditor::Iterator ins) override {
