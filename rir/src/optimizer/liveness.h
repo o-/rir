@@ -47,14 +47,14 @@ public:
     void print() const {
         Rprintf("{ ");
         for (auto const & var : variables) {
-            Rprintf("%s ", var.c_str());
+            Rprintf("%s ", CHAR(PRINTNAME((var))));
         }
         Rprintf("}");
     }
 
     // as of now, store names of variables as strings...
     // maybe change to ints?
-    std::unordered_set<std::string> variables;
+    std::unordered_set<SEXP> variables;
 
 };
 
@@ -75,17 +75,17 @@ protected:
 
     void ldarg_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.insert(CHAR(PRINTNAME((bc.immediateConst()))));
+        current().top().variables.insert(bc.immediateConst());
     }
 
     void ldvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.insert(CHAR(PRINTNAME((bc.immediateConst()))));
+        current().top().variables.insert(bc.immediateConst());
     }
 
     void stvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.erase(CHAR(PRINTNAME((bc.immediateConst()))));
+        current().top().variables.insert(bc.immediateConst());
     }
 
     void ret_(CodeEditor::Iterator ins) override {
