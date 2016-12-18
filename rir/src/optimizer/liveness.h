@@ -9,8 +9,7 @@
 
 
 namespace rir {
-
-
+    
 /** Our abstract value.
  *
  * Liveness analysis uses powerset lattice, the elements being the variables of the analyzed function.
@@ -52,13 +51,57 @@ public:
         Rprintf("}");
     }
 
-    // as of now, store names of variables as strings...
-    // maybe change to ints?
     std::unordered_set<SEXP> variables;
 
 };
 
-class LivenessAnalysis : public BackwardAnalysisIns<AbstractState<ASet>>, public InstructionDispatcher::Receiver {
+template <typename AVALUE>
+class LivenessAbstractState : public State
+{
+public:
+    
+    LivenessAbstractState() = default;
+
+    LivenessAbstractState(LivenessAbstractState const &) = default;
+    
+    virtual ~LivenessAbstractState()
+    {}
+    
+    /** Creates a deep copy of the state and returns it.
+     */
+    virtual LivenessAbstractState * clone() const
+    {
+        return new LivenessAbstractState(*this);
+    }
+
+    /** Merges the information from the other state, returns true if changed.
+     */
+    virtual bool mergeWith(const State *other)
+    {
+        return this->state.mergeWith(dynamic_cast<const LivenessAbstractState*>(other)->getState());
+    }
+    
+    const ASet& getState() const
+    {
+        return state;
+    }
+    
+    void setState(const ASet& s)
+    {
+        state = s;
+    }
+    
+    void insert(SEXP e)
+    {
+        state.variables.insert(e);
+    }
+    
+private:
+    
+    AVALUE state;
+};
+
+class LivenessAnalysis : public BackwardAnalysisIns<LivenessAbstractState<ASet>>, public InstructionDispatcher::Receiver {
 public:
     LivenessAnalysis() :
         dispatcher_(*this) {
@@ -66,26 +109,26 @@ public:
 
 protected:
 
-    AbstractState<ASet> * initialState() override {
-        auto * result = new AbstractState<ASet>();
+    LivenessAbstractState<ASet> * initialState() override {
+        auto * result = new LivenessAbstractState<ASet>();
         // No instructions use stack, we only have one abstract value stored here
-        result->push(ASet::bottom());
+        result->setState(ASet::bottom());
         return result;
     }
 
     void ldarg_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.insert(bc.immediateConst());
+        current().insert(bc.immediateConst());
     }
 
     void ldvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.insert(bc.immediateConst());
+        current().insert(bc.immediateConst());
     }
 
     void stvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
-        current().top().variables.insert(bc.immediateConst());
+        current().insert(bc.immediateConst());
     }
 
     void ret_(CodeEditor::Iterator ins) override {

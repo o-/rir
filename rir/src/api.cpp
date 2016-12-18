@@ -227,7 +227,8 @@ REXPORT SEXP rir_analyze_liveness(SEXP what) {
     la.analyze(ce);
 
     Rprintf("Live at the beginning: ");
-    la.finalState().stack().top().print();
+    //la.finalState().stack().top().print();
+    la.finalState().getState().print();
     Rprintf("\n");
 
     return R_NilValue;

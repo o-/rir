@@ -320,6 +320,7 @@ class BackwardAnalysis : public Analysis {
 
     void doAnalyze() override {
         computeBackwardCF();
+        
         initialState_ = initialState();
         Dispatcher & d = dispatcher();
 
