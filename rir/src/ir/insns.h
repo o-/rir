@@ -17,6 +17,14 @@ DEF_INSTR(push_code_, 1, 0, 1, 1)
  * push_code_:: take immediate code object index, and push code object onto obj
  * stack
  */
+DEF_INSTR(ldsupvar_, 2, 0, 1, 0)
+/**
+ * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
+ */
+DEF_INSTR(ldsupfun_, 2, 0, 1, 0)
+/**
+ * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
+ */
 DEF_INSTR(ldfun_, 1, 0, 1, 0)
 /**
  * ldfun_:: take immediate CP index of dd symbol (eg. ..1), find binding in env

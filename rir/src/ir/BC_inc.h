@@ -73,6 +73,10 @@ typedef struct {
     uint32_t id;
 } GuardFunArgs;
 typedef uint32_t GuardT;
+typedef struct {
+    uint32_t level;
+    PoolIdxT sym;
+} LdSupVarArgs;
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
@@ -102,6 +106,7 @@ class BC {
         FunIdxT fun;
         NumArgsT arg_idx;
         JmpT offset;
+        LdSupVarArgs ld_sup_var_args;
         uint32_t i;
     };
 
@@ -188,6 +193,8 @@ class BC {
     inline static BC push(double constant);
     inline static BC push(int constant);
     inline static BC push_code(FunIdxT i);
+    inline static BC ldsupfun(SEXP sym, uint32_t level);
+    inline static BC ldsupvar(SEXP sym, uint32_t level);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldlval(SEXP sym);

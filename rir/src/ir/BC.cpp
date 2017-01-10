@@ -29,6 +29,13 @@ bool BC::operator==(const BC& other) const {
     case Opcode::subassign2_:
         return immediate.pool == other.immediate.pool;
 
+    case Opcode::ldsupfun_:
+    case Opcode::ldsupvar_:
+        return immediate.ld_sup_var_args.level ==
+                   other.immediate.ld_sup_var_args.level &&
+               immediate.ld_sup_var_args.sym ==
+                   other.immediate.ld_sup_var_args.sym;
+
     case Opcode::dispatch_:
     case Opcode::call_:
     case Opcode::call_stack_:
@@ -126,6 +133,11 @@ void BC::write(CodeStream& cs) const {
     case Opcode::missing_:
     case Opcode::subassign2_:
         cs.insert(immediate.pool);
+        return;
+
+    case Opcode::ldsupfun_:
+    case Opcode::ldsupvar_:
+        cs.insert(immediate.ld_sup_var_args);
         return;
 
     case Opcode::guard_env_:
@@ -344,6 +356,12 @@ void BC::print(CallSite cs) {
     case Opcode::stvar_:
     case Opcode::missing_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
+        break;
+    case Opcode::ldsupfun_:
+    case Opcode::ldsupvar_:
+        Rprintf(" %d @ %u # %s", immediate.ld_sup_var_args.level,
+                immediate.ld_sup_var_args.sym,
+                CHAR(PRINTNAME(Pool::get(immediate.ld_sup_var_args.sym))));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);

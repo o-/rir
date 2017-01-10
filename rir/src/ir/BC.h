@@ -32,6 +32,10 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::subassign2_:
         immediate.pool = *(PoolIdxT*)pc;
         break;
+    case Opcode::ldsupfun_:
+    case Opcode::ldsupvar_:
+        immediate.ld_sup_var_args = *(LdSupVarArgs*)pc;
+        break;
     case Opcode::dispatch_stack_:
     case Opcode::call_:
     case Opcode::dispatch_:
@@ -174,6 +178,23 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
+BC BC::ldsupvar(SEXP sym, uint32_t level) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.ld_sup_var_args.sym = Pool::insert(sym);
+    i.ld_sup_var_args.level = level;
+    return BC(Opcode::ldsupvar_, i);
+}
+BC BC::ldsupfun(SEXP sym, uint32_t level) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.ld_sup_var_args.sym = Pool::insert(sym);
+    i.ld_sup_var_args.level = level;
+    return BC(Opcode::ldsupfun_, i);
+}
+
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

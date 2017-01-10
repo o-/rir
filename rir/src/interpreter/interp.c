@@ -194,6 +194,43 @@ static void jit(SEXP cls, Context* ctx) {
     SET_FORMALS(cls, FORMALS(cmp));
 }
 
+INSTRUCTION(ldsupfun_) {
+    uint32_t level = readImmediate(pc);
+
+    SEXP theEnv = env;
+    while (level--) {
+        theEnv = ENCLOS(env);
+        assert(theEnv && theEnv != R_NilValue);
+    }
+
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findFun(sym, theEnv);
+
+    // TODO something should happen here
+    if (val == R_UnboundValue)
+        assert(false && "Unbound var");
+    else if (val == R_MissingArg)
+        assert(false && "Missing argument");
+
+    switch (TYPEOF(val)) {
+    case CLOSXP:
+        /** If compile on demand is active, check that the function to be called
+         * is compiled already, and compile if not.
+         */
+        if (COMPILE_ON_DEMAND) {
+            jit(val, ctx);
+        }
+        break;
+    case SPECIALSXP:
+    case BUILTINSXP:
+        // special and builtin functions are ok
+        break;
+    default:
+        error("attempt to apply non-function");
+    }
+    ostack_push(ctx, val);
+}
+
 INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findFun(sym, env);
@@ -267,6 +304,37 @@ INSTRUCTION(ldlval_) {
 INSTRUCTION(ldarg_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVarInFrame(env, sym);
+    R_Visible = TRUE;
+
+    if (val == R_UnboundValue) {
+        Rf_error("object not found");
+    } else if (val == R_MissingArg) {
+        Rf_error("argument \"%s\" is missing, with no default",
+                 CHAR(PRINTNAME(sym)));
+    }
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val, ctx);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
+}
+
+INSTRUCTION(ldsupvar_) {
+    uint32_t level = readImmediate(pc);
+
+    SEXP theEnv = env;
+    while (level--) {
+        theEnv = ENCLOS(env);
+        assert(theEnv && theEnv != R_NilValue);
+    }
+
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, theEnv);
     R_Visible = TRUE;
 
     if (val == R_UnboundValue) {
