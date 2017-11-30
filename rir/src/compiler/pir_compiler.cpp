@@ -4,6 +4,10 @@
 #include "analysis/query.h"
 #include "analysis/verifier.h"
 #include "ir/BC.h"
+#include "opt/cleanup.h"
+#include "opt/delay_env.h"
+#include "opt/delay_instr.h"
+#include "opt/elide_env.h"
 #include "opt/scope_resolution.h"
 #include "pir/pir_impl.h"
 #include "transform/insert_cast.h"
@@ -706,6 +710,18 @@ void PirCompiler::compileFunction(SEXP f) {
         ScopeResolution::apply(f);
         if (verb)
             print("scope", f);
+        Cleanup::apply(f);
+        if (verb)
+            print("cleanup", f);
+        DelayInstr::apply(f);
+        if (verb)
+            print("delay instr", f);
+        ElideEnv::apply(f);
+        if (verb)
+            print("elide env", f);
+        DelayEnv::apply(f);
+        if (verb)
+            print("delay env", f);
     };
 
     cmp.m->print(std::cout);
