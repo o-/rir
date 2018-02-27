@@ -4,6 +4,7 @@
 #include "analysis/query.h"
 #include "analysis/verifier.h"
 #include "ir/BC.h"
+#include "opt/scope_resolution.h"
 #include "pir/pir_impl.h"
 #include "transform/insert_cast.h"
 #include "util/builder.h"
@@ -694,6 +695,25 @@ void PirCompiler::compileFunction(SEXP f) {
     TheCompiler cmp;
     cmp(f);
 
+    size_t passnr = 0;
+    auto print = [&](const std::string& pass, pir::Function* f) {
+        std::cout << "============== " << pass << " == " << passnr++
+                  << " ======================\n";
+        f->print(std::cout);
+    };
+
+    auto apply = [&](pir::Function* f, bool verb) {
+        ScopeResolution::apply(f);
+        if (verb)
+            print("scope", f);
+    };
+
+    cmp.m->print(std::cout);
+    for (auto f : cmp.m->function) {
+        apply(f, false);
+        apply(f, false);
+    }
+    std::cout << "============== whole module passes ======================\n";
     cmp.m->print(std::cout);
 
     delete cmp.m;

@@ -41,6 +41,12 @@ bool Value::isInstruction() {
 }
 
 Value* Value::replaceRefs(Value* from, Value* to) {
+    if (tag == Tag::ClosureWrapper) {
+        auto c = ClosureWrapper::Cast(this);
+        assert(c);
+        if (c->env == from)
+            return new ClosureWrapper(c->fun, to);
+    }
     return this;
 }
 }
