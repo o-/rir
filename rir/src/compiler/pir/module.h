@@ -3,19 +3,26 @@
 
 #include <iostream>
 #include <vector>
+#include "../../runtime/Function.h"
 
 namespace rir {
 namespace pir {
 
 class Function;
-class Env;
+
+struct IRTransformation {
+  rir::Function* srcIR;
+  pir::Function* dstIR;
+};
+
 
 class Module {
   public:
-    std::vector<Function*> functions;
+    std::vector<IRTransformation*> functions;
     void print(std::ostream& out = std::cout);
     ~Module();
 };
+
 }
 }
 
