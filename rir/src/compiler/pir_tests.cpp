@@ -1,4 +1,4 @@
-/*#include "pir_tests.h"
+#include "pir_tests.h"
 #include "R/Protect.h"
 #include "R_ext/Parse.h"
 #include "analysis/query.h"
@@ -20,7 +20,8 @@ pir::Module* compile(const std::string& inp) {
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
     Rir2Pir cmp;
-    return cmp.compileFunction(fun);
+    cmp.compileFunction(fun);
+    return cmp.getModule();
 }
 
 using namespace rir::pir;
@@ -37,7 +38,7 @@ typedef std::pair<std::string, TestFunction> Test;
 
 bool test42(const std::string& input) {
     auto m = compile(input);
-    auto f = m->functions.front();
+    auto f = m->functions.front()->dstFunction;
 
     CHECK(Query::noEnv(f));
 
@@ -48,7 +49,6 @@ bool test42(const std::string& input) {
     CHECK(ld);
     CHECK(TYPEOF(ld->c) == INTSXP);
     CHECK(INTEGER(ld->c)[0] == 42);
-
     delete m;
     return true;
 };
@@ -60,12 +60,12 @@ class NullBuffer : public std::ostream {
 
 bool verify(Module* m) {
     for (auto f : m->functions)
-        if (!Verify::apply(f))
+        if (!Verify::apply(f->dstFunction))
             return false;
     // TODO: find fix for osx
     // NullBuffer nb;
     for (auto f : m->functions)
-        f->print(std::cout);
+        f->dstFunction->print(std::cout);
 
     return true;
 }
@@ -96,10 +96,12 @@ bool testDelayEnv() {
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
-    Test("test_inline_arg",
-         []() { return test42("{f <- function(x) x; f(42L)}"); }),
+    Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
+    Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
+    //Test("test_inline_arg",
+    //     []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
-         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
+        []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
@@ -126,4 +128,3 @@ void PirTests::run() {
     }
 }
 }
-*/
