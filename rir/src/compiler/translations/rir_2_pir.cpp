@@ -202,7 +202,7 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
 
         if (!matched) {
             int size = state.stack_size();
-            state.runCurrentBC(builder, srcFunction, &results);
+            state.runCurrentBC(builder, srcFunction, srcCode, &results);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
         }
     }
@@ -240,8 +240,8 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
             }
             if (p->nargs() == 1) {
                 if (p == res)
-                    res = p->arg(0);
-                p->replaceUsesWith(p->arg(0));
+                    res = p->arg(0).val();
+                p->replaceUsesWith(p->arg(0).val());
                 it = bb->remove(it);
                 continue;
             }

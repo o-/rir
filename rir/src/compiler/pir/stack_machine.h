@@ -22,7 +22,8 @@ class StackMachine {
       void setEntry(pir::BB*);
       bool doMerge(Opcode*, Builder*, StackMachine*);
 
-      void runCurrentBC(Builder*, rir::Function*, std::vector<ReturnSite>*);
+      void runCurrentBC(Builder*, rir::Function*, rir::Code*,
+                        std::vector<ReturnSite>*);
       void clear();
       bool empty();
       size_t stack_size();

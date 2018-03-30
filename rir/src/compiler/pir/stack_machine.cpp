@@ -42,6 +42,7 @@ void StackMachine::set(size_t index, Value* value) {
 }
 
 void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
+                                rir::Code* srcCode,
                                 std::vector<ReturnSite>* results) {
     Value* v;
     Value* x;
@@ -318,6 +319,9 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             assert(false);
 
         // Unsupported opcodes:
+        case Opcode::make_env_:
+        case Opcode::get_env_:
+        case Opcode::set_env_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::ldlval_:
@@ -337,7 +341,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             assert(false);
             break;
     }
-    this->consumeBC(src->body()->endCode());
+    this->consumeBC(srcCode->endCode());
 }
 
 bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
