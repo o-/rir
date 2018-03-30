@@ -2,5 +2,5 @@
 
 namespace rir {
 
-void RirInlinedPromise2Rir::addReturn(pir::Value* res) {}
+void RirInlinedPromise2Rir::compileReturn(pir::Value* res) {}
 }

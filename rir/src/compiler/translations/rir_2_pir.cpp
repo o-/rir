@@ -29,6 +29,24 @@ typedef rir::RList RList;
 
 typedef std::pair<BB*, Value*> ReturnSite;
 
+template <size_t SIZE>
+struct Matcher {
+    const std::array<Opcode, SIZE> seq;
+
+    typedef std::function<void(Opcode*)> MatcherMaybe;
+
+    bool operator()(Opcode* pc, Opcode* end, MatcherMaybe m) const {
+        for (size_t i = 0; i < SIZE; ++i) {
+            if (*pc != seq[i])
+                return false;
+            BC::advance(&pc);
+            if (pc == end)
+                return false;
+        }
+        m(pc);
+        return true;
+    }
+};
 }
 
 namespace rir {
@@ -64,33 +82,39 @@ pir::Function* Rir2PirCompiler::compileFunction(Function* function2Compile,
 }
 
 pir::Value* Rir2Pir::translate() {
-    this->recoverCFG(srcCode);
-    
+    assert(!done);
+    done = true;
+
+    recoverCFG(srcCode);
+
     std::deque<StackMachine> worklist;
-    pir::Builder* builder = &this->insert;
 
-    state.setPC(srcCode->code());
-    Opcode* end = srcCode->endCode();
+    StackMachine state(srcFunction, srcCode);
 
-    std::vector<ReturnSite> results;
+    auto popFromWorklist = [&]() {
+        assert(!worklist.empty());
+        state = worklist.back();
+        worklist.pop_back();
+        insert.bb = state.getEntry();
+    };
 
-    while (state.getPC() != end || !worklist.empty()) {
-        if (state.getPC() == end)
-            popFromWorklist(&worklist);
+    while (!state.atEnd() || !worklist.empty()) {
+        if (state.atEnd())
+            popFromWorklist();
 
         BC bc = state.getCurrentBC();
 
         if (mergepoint.count(state.getPC()) > 0) {
             StackMachine* other = &mergepoint.at(state.getPC());
-            bool todo = state.doMerge(state.getPC(), builder, other);
+            bool todo = state.doMerge(state.getPC(), insert, other);
             state = mergepoint.at(state.getPC());
-            builder->next(state.getEntry());
+            insert.next(state.getEntry());
             if (!todo) {
                 if (worklist.empty()) {
                     state.clear();
                     break;
                 }
-                popFromWorklist(&worklist);
+                popFromWorklist();
                 continue;
             }
         }
@@ -108,30 +132,30 @@ pir::Value* Rir2Pir::translate() {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
                 Value* v = state.pop();
-                (*builder)(new Branch(v));
+                insert(new Branch(v));
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = (*builder)(new IsObject(state.top()));
-                (*builder)(new Branch(v));
+                Value* v = insert(new IsObject(state.top()));
+                insert(new Branch(v));
                 break;
             }
             default:
                 assert(false);
             }
 
-            BB* branch = builder->createBB();
-            BB* fall = builder->createBB();
+            BB* branch = insert.createBB();
+            BB* fall = insert.createBB();
 
             switch (bc.bc) {
             case Opcode::brtrue_:
-                builder->bb->next0 = fall;
-                builder->bb->next1 = branch;
+                insert.bb->next0 = fall;
+                insert.bb->next1 = branch;
                 break;
             case Opcode::brfalse_:
             case Opcode::brobj_:
-                builder->bb->next0 = branch;
-                builder->bb->next1 = fall;
+                insert.bb->next0 = branch;
+                insert.bb->next1 = fall;
                 break;
             default:
                 assert(false);
@@ -148,10 +172,10 @@ pir::Value* Rir2Pir::translate() {
             case Opcode::brobj_: {
                 state.setPC(trg);
                 state.setEntry(branch);
-                builder->bb = branch;
+                insert.bb = branch;
                 Value* front = state.front();
-                (*builder)(new Deopt(builder->env, state.getPC(),
-                                     state.stack_size(), &front));
+                insert(new Deopt(insert.env, state.getPC(), state.stack_size(),
+                                 &front));
                 break;
             }
             default:
@@ -160,7 +184,7 @@ pir::Value* Rir2Pir::translate() {
 
             state.setPC(fallpc);
             state.setEntry(fall);
-            builder->bb = fall;
+            insert.bb = fall;
             continue;
         }
 
@@ -169,7 +193,7 @@ pir::Value* Rir2Pir::translate() {
 
         bool matched = false;
 
-        ifFunctionLiteral(state.getPC(), end, [&](Opcode* next) {
+        ifFunctionLiteral(state.getPC(), srcCode->endCode(), [&](Opcode* next) {
             Opcode* pc = state.getPC();
             BC ldfmls = BC::advance(&pc);
             BC ldcode = BC::advance(&pc);
@@ -190,7 +214,7 @@ pir::Value* Rir2Pir::translate() {
 
             pir::Function* innerF = cmp.compileFunction(function, fmls);
 
-            state.push((*builder)(new MkFunCls(innerF, builder->env)));
+            state.push(insert(new MkFunCls(innerF, insert.env)));
 
             matched = true;
             state.setPC(next);
@@ -198,8 +222,9 @@ pir::Value* Rir2Pir::translate() {
 
         if (!matched) {
             int size = state.stack_size();
-            state.runCurrentBC(*this, srcFunction, srcCode, &results);
+            state.runCurrentBC(*this, insert);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
+            state.advancePC();
         }
     }
     assert(state.empty());
@@ -207,11 +232,11 @@ pir::Value* Rir2Pir::translate() {
     Value* res;
     assert(results.size() > 0);
     if (results.size() == 1) {
-        builder->bb = std::get<0>(results.back());
-        res = std::get<1>(results.back());
+        insert.bb = results.back().first;
+        res = results.back().second;
     } else {
-        BB* merge = builder->createBB();
-        Phi* phi = (*builder)(new Phi());
+        BB* merge = insert.createBB();
+        Phi* phi = insert(new Phi());
         for (auto r : results) {
             r.first->next0 = merge;
             phi->addInput(r.first, r.second);
@@ -221,12 +246,12 @@ pir::Value* Rir2Pir::translate() {
     }
 
     results.clear();
-    this->addReturn(res);
+    compileReturn(res);
 
-    //CFG cfg(builder->code->entry);
-    
+    // CFG cfg(insert.code->entry);
+
     // Remove excessive Phis
-    Visitor::run(builder->code->entry, [&](BB* bb) {
+    Visitor::run(insert.code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             Phi* p = Phi::Cast(*it);
@@ -246,7 +271,7 @@ pir::Value* Rir2Pir::translate() {
         }
     });
 
-    InsertCast c(builder->code->entry);
+    InsertCast c(insert.code->entry);
     c();
 
     return res;
@@ -275,7 +300,8 @@ void Rir2Pir::recoverCFG(rir::Code* srcCode) {
     // Create mergepoints
     for (auto m : incom) {
         if (std::get<1>(m).size() > 1) {
-            mergepoint[std::get<0>(m)] = StackMachine();
+            mergepoint.emplace(m.first,
+                               StackMachine(srcFunction, srcCode, m.first));
         }
     }
 }
@@ -311,7 +337,7 @@ void Rir2PirCompiler::optimizeModule() {
             print("delay env", f);
     };
 
-    IRTransformation* moduleFunction = *this->module->functions.begin();
+    IRTransformation* moduleFunction = *module->functions.begin();
     for (size_t iter = 0; iter < 5; ++iter) {
         Inline::apply(moduleFunction->dstFunction);
         if (verbose)
@@ -321,12 +347,5 @@ void Rir2PirCompiler::optimizeModule() {
     }
 }
 
-void Rir2Pir::popFromWorklist(std::deque<StackMachine>* worklist) {
-    assert(!worklist->empty());
-    state = worklist->back();
-    worklist->pop_back();
-    insert.bb = state.getEntry();
-}
-
-void Rir2Pir::addReturn(Value* res) { insert(new Return(res)); }
+void Rir2Pir::compileReturn(Value* res) { insert(new Return(res)); }
 }

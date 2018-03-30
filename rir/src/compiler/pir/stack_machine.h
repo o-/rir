@@ -12,20 +12,26 @@ class Rir2Pir;
 
 namespace pir {
 
-typedef std::pair<BB*, Value*> ReturnSite;
-
 class StackMachine {
     public:
-      StackMachine() : stack(), currentBC(), pc(), entry() {}
+      StackMachine(rir::Function* srcFunction, rir::Code* srcCode)
+          : srcFunction(srcFunction), srcCode(srcCode), pc(srcCode->code()) {}
+      StackMachine(rir::Function* srcFunction, rir::Code* srcCode, Opcode* pc)
+          : srcFunction(srcFunction), srcCode(srcCode), pc(pc) {}
 
       Opcode* getPC();
       void setPC(Opcode*);
+      bool atEnd() { return pc == srcCode->endCode(); }
+
       pir::BB* getEntry();
       void setEntry(pir::BB*);
-      bool doMerge(Opcode*, Builder*, StackMachine*);
 
-      void runCurrentBC(Rir2Pir& cmp, rir::Function*, rir::Code*,
-                        std::vector<ReturnSite>*);
+      bool doMerge(Opcode*, Builder&, StackMachine*);
+
+      typedef std::pair<BB*, Value*> ReturnSite;
+      typedef std::function<void(ReturnSite)> ReturnMaybe;
+      void runCurrentBC(Rir2Pir& cmp, Builder&);
+
       void clear();
       bool empty();
       size_t stack_size();
@@ -34,17 +40,16 @@ class StackMachine {
       void push(Value*);
       Value* pop();
       BC getCurrentBC();
-      
+      void advancePC();
+
     private:
+      rir::Function* srcFunction;
+      rir::Code* srcCode;
       std::deque<Value*> stack;
-      BC currentBC;
       Opcode* pc;
       pir::BB* entry = nullptr;
       Value* at(size_t);
       void set(size_t n, Value* v);
-      void advancePC();
-      void decodeCurrentBytecode();
-      void consumeBC(Opcode* end);
 };
 }
 }

@@ -7,25 +7,6 @@
 
 namespace rir {
 
-template <size_t SIZE>
-struct Matcher {
-    const std::array<Opcode, SIZE> seq;
-
-    typedef std::function<void(Opcode*)> MatcherMaybe;
-
-    bool operator()(Opcode* pc, Opcode* end, MatcherMaybe m) const {
-        for (size_t i = 0; i < SIZE; ++i) {
-            if (*pc != seq[i])
-                return false;
-            BC::advance(&pc);
-            if (pc == end)
-                return false;
-        }
-        m(pc);
-        return true;
-    }
-};
-
 class Rir2PirCompiler {
   public:
     Rir2PirCompiler(pir::Module* module) : module(module) {}
@@ -46,30 +27,32 @@ class Rir2Pir : public PirTranslator {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, pir::Builder& insert,
             rir::Function* srcFunction, rir::Code* srcCode)
-        : PirTranslator(cmp.isVerbose()), cmp(cmp), insert(insert),
+        : PirTranslator(cmp.isVerbose()), insert(insert), cmp(cmp),
           srcFunction(srcFunction), srcCode(srcCode) {}
+
     pir::Value* translate();
 
-    /*static pir::IRTransformation* declare(SEXP&);
-    static pir::IRTransformation* declare(rir::Function*);
-    static pir::IRTransformation* declare(rir::Function*, rir::Code*);*/
+    typedef pir::StackMachine::ReturnSite ReturnSite;
+    void addReturn(ReturnSite r) { results.push_back(r); }
+
+    Rir2PirCompiler& compiler() { return cmp; }
 
   private:
-    Rir2PirCompiler& cmp;
+    bool done = false;
+
     pir::Builder& insert;
+    Rir2PirCompiler& cmp;
 
     rir::Function* srcFunction;
     rir::Code* srcCode;
 
     std::unordered_map<Opcode*, pir::StackMachine> mergepoint;
-    pir::StackMachine state;
+    std::vector<ReturnSite> results;
 
     void recoverCFG(rir::Code*);
     bool doMerge(Opcode* trg);
-    void popFromWorklist(std::deque<pir::StackMachine>*);
-    void addReturn(pir::Value*);
+    void compileReturn(pir::Value*);
 
-    friend class pir::StackMachine;
     friend class RirInlinedPromise2Rir;
 };
 }
