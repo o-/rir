@@ -51,30 +51,29 @@ struct Matcher {
 
 namespace rir {
 
-pir::Function* Rir2PirCompiler::compileFunction(SEXP function2Compile) {
-    assert(isValidClosureSEXP(function2Compile));
-    DispatchTable* tbl = DispatchTable::unpack(BODY(function2Compile));
-    auto formals = RList(FORMALS(function2Compile));
+pir::Function* Rir2PirCompiler::compileFunction(SEXP closure) {
+    assert(isValidClosureSEXP(closure));
+    DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
+    auto formals = RList(FORMALS(closure));
 
     std::vector<SEXP> fmls;
-    for (auto it = formals.begin(); it != formals.end(); ++it) {
+    for (auto it = formals.begin(); it != formals.end(); ++it)
         fmls.push_back(it.tag());
-    }
-    return compileFunction(tbl->first(), fmls);
+
+    rir::Function* srcFunction = tbl->first();
+    return compileFunction(srcFunction, fmls);
 }
 
-pir::Function* Rir2PirCompiler::compileFunction(Function* function2Compile,
-                                                std::vector<SEXP> fmls) {
-    pir::Function* pirFunction = new pir::Function(fmls);
-    IRTransformation* rir2Pir =
-        new IRTransformation(function2Compile, pirFunction);
+pir::Function* Rir2PirCompiler::compileFunction(Function* srcFunction,
+                                                const std::vector<SEXP>& args) {
+    pir::Function* pirFunction = module->declare(srcFunction, args);
+
     Builder builder(pirFunction, Env::theContext());
 
-    module->functions.push_back(rir2Pir);
-
-    Rir2Pir rir2pir(*this, builder, function2Compile, rir2Pir->srcCode);
-    rir2pir.translate();
-    pirFunction->print(std::cout);
+    {
+        Rir2Pir rir2pir(*this, builder, srcFunction, srcFunction->body());
+        rir2pir.translate();
+    }
 
     assert(Verify::apply(pirFunction));
 
@@ -274,6 +273,12 @@ pir::Value* Rir2Pir::translate() {
     InsertCast c(insert.code->entry);
     c();
 
+    if (isVerbose()) {
+        std::cout << " ========== Done compiling " << srcFunction << "\n";
+        insert.function->print(std::cout);
+        std::cout << " ==========\n";
+    }
+
     return res;
 }
 
@@ -337,13 +342,25 @@ void Rir2PirCompiler::optimizeModule() {
             print("delay env", f);
     };
 
-    IRTransformation* moduleFunction = *module->functions.begin();
-    for (size_t iter = 0; iter < 5; ++iter) {
-        Inline::apply(moduleFunction->dstFunction);
+    module->eachPirFunction([&](pir::Module::VersionedFunction& v) {
+        auto f = v.current();
         if (verbose)
-            print("inline", moduleFunction->dstFunction);
+            v.saveVersion();
+        apply(f, verbose);
+        apply(f, verbose);
+    });
 
-        apply(moduleFunction->dstFunction, verbose);
+    for (int i = 0; i < 5; ++i) {
+        module->eachPirFunction([&](pir::Module::VersionedFunction& v) {
+            auto f = v.current();
+            if (verbose)
+                v.saveVersion();
+            Inline::apply(f);
+            if (verbose)
+                print("inline", f);
+
+            apply(f, verbose);
+        });
     }
 }
 

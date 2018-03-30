@@ -11,7 +11,7 @@ class Rir2PirCompiler {
   public:
     Rir2PirCompiler(pir::Module* module) : module(module) {}
     pir::Function* compileFunction(SEXP);
-    pir::Function* compileFunction(Function*, std::vector<SEXP>);
+    pir::Function* compileFunction(Function*, const std::vector<SEXP>&);
     void optimizeModule();
     pir::Module* getModule() { return module; }
 
@@ -51,7 +51,7 @@ class Rir2Pir : public PirTranslator {
 
     void recoverCFG(rir::Code*);
     bool doMerge(Opcode* trg);
-    void compileReturn(pir::Value*);
+    virtual void compileReturn(pir::Value*);
 
     friend class RirInlinedPromise2Rir;
 };

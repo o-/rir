@@ -13,7 +13,7 @@ class RirInlinedPromise2Rir : public Rir2Pir {
                   functionPir2Rir.srcFunction, promise) {}
 
   private:
-    void compileReturn(pir::Value*);
+    void compileReturn(pir::Value*) override;
 };
 }
 #endif
