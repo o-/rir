@@ -8,9 +8,9 @@
 #include <queue>
 
 namespace rir {
-class Rir2Pir;
-
 namespace pir {
+
+class Rir2Pir;
 
 class StackMachine {
     public:

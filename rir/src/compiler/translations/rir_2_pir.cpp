@@ -22,7 +22,7 @@
 namespace {
 
 using namespace rir::pir;
-typedef rir::pir::Function Function;
+typedef rir::Function Function;
 typedef rir::Opcode Opcode;
 typedef rir::BC BC;
 typedef rir::RList RList;
@@ -50,8 +50,9 @@ struct Matcher {
 }
 
 namespace rir {
+namespace pir {
 
-pir::Function* Rir2PirCompiler::compileFunction(SEXP closure) {
+Function* Rir2PirCompiler::compileFunction(SEXP closure) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto formals = RList(FORMALS(closure));
@@ -64,9 +65,9 @@ pir::Function* Rir2PirCompiler::compileFunction(SEXP closure) {
     return compileFunction(srcFunction, fmls);
 }
 
-pir::Function* Rir2PirCompiler::compileFunction(Function* srcFunction,
-                                                const std::vector<SEXP>& args) {
-    pir::Function* pirFunction = module->declare(srcFunction, args);
+Function* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
+                                           const std::vector<SEXP>& args) {
+    Function* pirFunction = module->declare(srcFunction, args);
 
     Builder builder(pirFunction, Env::theContext());
 
@@ -80,7 +81,7 @@ pir::Function* Rir2PirCompiler::compileFunction(Function* srcFunction,
     return pirFunction;
 }
 
-pir::Value* Rir2Pir::translate() {
+Value* Rir2Pir::translate() {
     assert(!done);
     done = true;
 
@@ -211,7 +212,7 @@ pir::Value* Rir2Pir::translate() {
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            pir::Function* innerF = cmp.compileFunction(function, fmls);
+            Function* innerF = cmp.compileFunction(function, fmls);
 
             state.push(insert(new MkFunCls(innerF, insert.env)));
 
@@ -315,13 +316,13 @@ void Rir2PirCompiler::optimizeModule() {
     size_t passnr = 0;
     bool verbose = isVerbose();
 
-    auto print =     [&](const std::string& pass, pir::Function* f) {
+    auto print = [&](const std::string& pass, Function* f) {
         std::cout << "============== " << pass << " == " << passnr++
                 << " ======================\n";
         f->print(std::cout);
     };
 
-    auto apply = [&](pir::Function* f, bool verb) {
+    auto apply = [&](Function* f, bool verb) {
         ForceDominance::apply(f);
         if (verb)
             print("force", f);
@@ -342,7 +343,7 @@ void Rir2PirCompiler::optimizeModule() {
             print("delay env", f);
     };
 
-    module->eachPirFunction([&](pir::Module::VersionedFunction& v) {
+    module->eachPirFunction([&](Module::VersionedFunction& v) {
         auto f = v.current();
         if (verbose)
             v.saveVersion();
@@ -351,7 +352,7 @@ void Rir2PirCompiler::optimizeModule() {
     });
 
     for (int i = 0; i < 5; ++i) {
-        module->eachPirFunction([&](pir::Module::VersionedFunction& v) {
+        module->eachPirFunction([&](Module::VersionedFunction& v) {
             auto f = v.current();
             if (verbose)
                 v.saveVersion();
@@ -365,4 +366,5 @@ void Rir2PirCompiler::optimizeModule() {
 }
 
 void Rir2Pir::compileReturn(Value* res) { insert(new Return(res)); }
+}
 }

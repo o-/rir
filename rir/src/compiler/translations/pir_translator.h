@@ -6,6 +6,7 @@
 #include "runtime/Function.h"
 
 namespace rir {
+namespace pir {
 
 class PirTranslator {
   public:
@@ -18,6 +19,7 @@ class PirTranslator {
   private:
       bool verbose;
 };
+}
 }
 
 #endif

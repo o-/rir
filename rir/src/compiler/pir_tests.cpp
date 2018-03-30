@@ -20,7 +20,7 @@ std::pair<pir::Function*, pir::Module*> compile(const std::string& inp) {
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
     pir::Module* m = new pir::Module;
-    Rir2PirCompiler cmp(m);
+    pir::Rir2PirCompiler cmp(m);
     // cmp.setVerbose(true);
     auto f = cmp.compileFunction(fun);
     cmp.optimizeModule();

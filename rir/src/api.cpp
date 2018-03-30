@@ -126,7 +126,7 @@ REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
     pir::Module* m = new pir::Module;
-    Rir2PirCompiler cmp(m);
+    pir::Rir2PirCompiler cmp(m);
     cmp.setVerbose(true);
     cmp.compileFunction(what);
     cmp.optimizeModule();
