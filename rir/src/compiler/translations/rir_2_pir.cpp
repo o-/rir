@@ -33,7 +33,7 @@ typedef std::pair<BB*, Value*> ReturnSite;
 
 namespace rir {
 
-pir::Function* Rir2Pir::compileFunction(SEXP function2Compile) {
+pir::Function* Rir2PirCompiler::compileFunction(SEXP function2Compile) {
     assert(isValidClosureSEXP(function2Compile));
     DispatchTable* tbl = DispatchTable::unpack(BODY(function2Compile));
     auto formals = RList(FORMALS(function2Compile));
@@ -42,35 +42,32 @@ pir::Function* Rir2Pir::compileFunction(SEXP function2Compile) {
     for (auto it = formals.begin(); it != formals.end(); ++it) {
         fmls.push_back(it.tag());
     }
-    return this->compileFunction(tbl->first(), fmls);
+    return compileFunction(tbl->first(), fmls);
 }
 
-pir::Function* Rir2Pir::compileFunction(Function* function2Compile,
-                                        std::vector<SEXP> fmls) {
-    pir::Function* pirFunction = this->compileInnerFunction(function2Compile, fmls);
-    this->optimizeFunction(pirFunction);
-    return pirFunction;
-}
-
-pir::Function* Rir2Pir::compileInnerFunction(Function* function2Compile,
-                                        std::vector<SEXP> fmls) {
+pir::Function* Rir2PirCompiler::compileFunction(Function* function2Compile,
+                                                std::vector<SEXP> fmls) {
     pir::Function* pirFunction = new pir::Function(fmls);
     IRTransformation* rir2Pir =
         new IRTransformation(function2Compile, pirFunction);
-    this->builder = new Builder(pirFunction, Env::theContext());
+    Builder builder(pirFunction, Env::theContext());
 
-    this->module->functions.push_back(rir2Pir);
-    this->translateCode(function2Compile, rir2Pir->srcCode);
-    if (Verify::apply(pirFunction))
-        return pirFunction;
-    return nullptr;
+    module->functions.push_back(rir2Pir);
+
+    Rir2Pir rir2pir(*this, builder, function2Compile, rir2Pir->srcCode);
+    rir2pir.translate();
+    pirFunction->print(std::cout);
+
+    assert(Verify::apply(pirFunction));
+
+    return pirFunction;
 }
 
-pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCode) {
+pir::Value* Rir2Pir::translate() {
     this->recoverCFG(srcCode);
     
     std::deque<StackMachine> worklist;
-    pir::Builder* builder = this->getBuilder();
+    pir::Builder* builder = &this->insert;
 
     state.setPC(srcCode->code());
     Opcode* end = srcCode->endCode();
@@ -79,7 +76,7 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
 
     while (state.getPC() != end || !worklist.empty()) {
         if (state.getPC() == end)
-            popFromWorklist(&worklist, builder);
+            popFromWorklist(&worklist);
 
         BC bc = state.getCurrentBC();
 
@@ -93,7 +90,7 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
                     state.clear();
                     break;
                 }
-                popFromWorklist(&worklist, builder);
+                popFromWorklist(&worklist);
                 continue;
             }
         }
@@ -191,8 +188,7 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Rir2Pir compiler(this->getModule());
-            pir::Function* innerF = compiler.compileInnerFunction(function, fmls);
+            pir::Function* innerF = cmp.compileFunction(function, fmls);
 
             state.push((*builder)(new MkFunCls(innerF, builder->env)));
 
@@ -202,7 +198,7 @@ pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCod
 
         if (!matched) {
             int size = state.stack_size();
-            state.runCurrentBC(builder, srcFunction, srcCode, &results);
+            state.runCurrentBC(*this, srcFunction, srcCode, &results);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
         }
     }
@@ -284,9 +280,9 @@ void Rir2Pir::recoverCFG(rir::Code* srcCode) {
     }
 }
 
-void Rir2Pir::optimizeFunction(pir::Function* function){
+void Rir2PirCompiler::optimizeModule() {
     size_t passnr = 0;
-    bool verbose = getVerbose();
+    bool verbose = isVerbose();
 
     auto print =     [&](const std::string& pass, pir::Function* f) {
         std::cout << "============== " << pass << " == " << passnr++
@@ -315,17 +311,6 @@ void Rir2Pir::optimizeFunction(pir::Function* function){
             print("delay env", f);
     };
 
-    if (verbose)
-        this->module->print(std::cout);
-
-    apply(function, false);
-    apply(function, false);
-
-    if (verbose) {
-        std::cout << "============== whole module passes ======================\n";
-        this->module->print(std::cout);
-    }
-
     IRTransformation* moduleFunction = *this->module->functions.begin();
     for (size_t iter = 0; iter < 5; ++iter) {
         Inline::apply(moduleFunction->dstFunction);
@@ -336,16 +321,12 @@ void Rir2Pir::optimizeFunction(pir::Function* function){
     }
 }
 
-void Rir2Pir::popFromWorklist(std::deque<StackMachine>* worklist, Builder* builder){
+void Rir2Pir::popFromWorklist(std::deque<StackMachine>* worklist) {
     assert(!worklist->empty());
     state = worklist->back();
     worklist->pop_back();
-    builder->bb = state.getEntry();
+    insert.bb = state.getEntry();
 }
 
-void Rir2Pir::addReturn(Value* res) { (*(this->getBuilder()))(new Return(res)); }
-
-pir::Builder* Rir2Pir::getBuilder() {  
-    return builder;    
-}
+void Rir2Pir::addReturn(Value* res) { insert(new Return(res)); }
 }

@@ -8,6 +8,8 @@
 #include <queue>
 
 namespace rir {
+class Rir2Pir;
+
 namespace pir {
 
 typedef std::pair<BB*, Value*> ReturnSite;
@@ -22,7 +24,7 @@ class StackMachine {
       void setEntry(pir::BB*);
       bool doMerge(Opcode*, Builder*, StackMachine*);
 
-      void runCurrentBC(Builder*, rir::Function*, rir::Code*,
+      void runCurrentBC(Rir2Pir& cmp, rir::Function*, rir::Code*,
                         std::vector<ReturnSite>*);
       void clear();
       bool empty();

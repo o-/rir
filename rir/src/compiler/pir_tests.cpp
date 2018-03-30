@@ -19,9 +19,11 @@ pir::Module* compile(const std::string& inp) {
     SEXP str = p(Rf_mkString(inp.c_str()));
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
-    Rir2Pir cmp;
+    pir::Module* m = new pir::Module;
+    Rir2PirCompiler cmp(m);
     cmp.compileFunction(fun);
-    return cmp.getModule();
+    cmp.optimizeModule();
+    return m;
 }
 
 using namespace rir::pir;

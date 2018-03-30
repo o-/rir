@@ -41,9 +41,10 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
+void StackMachine::runCurrentBC(Rir2Pir& pir2rir, rir::Function* src,
                                 rir::Code* srcCode,
                                 std::vector<ReturnSite>* results) {
+    Builder* builder = &pir2rir.insert;
     Value* v;
     Value* x;
     Value* y;
@@ -132,14 +133,14 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
                 Promise* prom = builder->function->createProm();
                 {
                     Builder promiseBuilder(builder->function, prom);
-                    Rir2Pir compiler(&promiseBuilder);
-                    compiler.translateCode(src, promiseCode);
+                    Rir2Pir compiler(pir2rir.cmp, promiseBuilder, src,
+                                     promiseCode);
+                    compiler.translate();
                 }
                 Value* val = Missing::instance();
                 if (Query::pure(prom)) {
-                    RirInlinedPromise2Rir compiler =
-                        RirInlinedPromise2Rir(builder);
-                    val = compiler.translateCode(src, promiseCode);
+                    RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+                    val = compiler.translate();
                 }
                 args.push_back((*builder)(new MkArg(prom, val, builder->env)));
             }
@@ -154,13 +155,13 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             {
                 // What should I do with this?
                 Builder promiseBuilder(builder->function, prom);
-                Rir2Pir compiler(&promiseBuilder);
-                compiler.translateCode(src, promiseCode);
+                Rir2Pir compiler(pir2rir.cmp, promiseBuilder, src, promiseCode);
+                compiler.translate();
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(builder);
-                val = compiler.translateCode(src, promiseCode);
+                RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+                val = compiler.translate();
             }
             // TODO: Remove comment and check how to deal with
             push((*builder)(new MkArg(prom, val, builder->env)));
