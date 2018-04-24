@@ -15,7 +15,9 @@ using namespace rir::pir;
 class TheScopeResolution {
   public:
     Closure* function;
-    TheScopeResolution(Closure* function) : function(function) {}
+    CFG cfg;
+    TheScopeResolution(Closure* function)
+        : function(function), cfg(function->entry) {}
     void operator()() {
         ScopeAnalysis analysis(function);
 
@@ -87,34 +89,62 @@ class TheScopeResolution {
                         if (localVals) {
                             aval.ifSingleValue([&](Value* val) {
                                 if (ldf) {
-                                    auto f = new Force(val);
-                                    // TODO
-                                    // !(PirType(RType::closure) >= phi->type)
+                                    auto f = val;
+                                    if (!PirType(RType::closure)
+                                             .isSuper(f->type)) {
+                                        auto fz = new Force(val);
+                                        auto ch = new ChkClosure(fz);
+                                        bb->replace(ip, fz);
+                                        next = bb->insert(ip + 1, ch);
+                                        next++;
+                                        f = ch;
+                                    } else {
+                                        next = bb->remove(ip);
+                                    }
                                     ld->replaceUsesWith(f);
-                                    bb->replace(ip, f);
                                 } else {
                                     ld->replaceUsesWith(val);
                                     next = bb->remove(ip);
                                 }
                             });
-                            if (!aval.isSingleValue() && !aval.isUnknown()) {
+                            if (!aval.isSingleValue() && !aval.isUnknown() &&
+                                !ldf) {
+                                auto hasCommonPred = [&](BB* load) {
+                                    bool success = true;
+                                    aval.eachSource([&](ValOrig& src) {
+                                        if (!cfg.transitivePredecessors
+                                                 [load->id]
+                                                     .count(src.origin->bb()))
+                                            success = false;
+                                    });
+                                    return success;
+                                };
+                                BB* phiPlacement = bb;
+                                // Shift phi up until we see at least two inputs
+                                // comming from different paths.
+                                for (;;) {
+                                    bool commonPred = true;
+                                    auto preds =
+                                        cfg.predecessors[phiPlacement->id];
+                                    for (auto pre : preds) {
+                                        commonPred =
+                                            commonPred && hasCommonPred(pre);
+                                    }
+                                    if (!commonPred)
+                                        break;
+                                    phiPlacement = *preds.begin();
+                                }
                                 auto phi = new Phi;
                                 aval.eachSource([&](ValOrig& src) {
                                     phi->addInput(src.origin->bb(), src.val);
                                 });
                                 phi->updateType();
-                                if (ldf) {
-                                    auto f = new Force(phi);
-                                    // TODO
-                                    // !(PirType(RType::closure) >= phi->type)
-                                    ld->replaceUsesWith(f);
+                                ld->replaceUsesWith(phi);
+                                if (phiPlacement == bb)
                                     bb->replace(ip, phi);
-                                    next = bb->insert(ip + 1, f);
-                                    next++;
-                                } else {
-                                    ld->replaceUsesWith(phi);
-                                    bb->replace(ip, phi);
-                                }
+                                else
+                                    phiPlacement->insert(phiPlacement->begin(),
+                                                         phi);
                             }
                         }
                     }

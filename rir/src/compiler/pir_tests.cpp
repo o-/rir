@@ -59,7 +59,7 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         }
     }
 
-    // cmp.setVerbose(true);
+    cmp.setVerbose(true);
     cmp.optimizeModule();
     return results;
 }

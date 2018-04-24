@@ -288,6 +288,7 @@ class CodeStream {
         code = nullptr;
         pos = 0;
 
+        res->print();
         CodeVerifier::calculateAndVerifyStack(res);
         return res->header;
     }
