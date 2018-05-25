@@ -11,7 +11,7 @@
 namespace {
 using namespace rir;
 
-pir::Module* compile(const std::string& inp) {
+std::pair<pir::Function*, pir::Module*> compile(const std::string& inp) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -19,9 +19,12 @@ pir::Module* compile(const std::string& inp) {
     SEXP str = p(Rf_mkString(inp.c_str()));
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
-    Rir2Pir cmp;
-    cmp.compileFunction(fun);
-    return cmp.getModule();
+    pir::Module* m = new pir::Module;
+    pir::Rir2PirCompiler cmp(m);
+    // cmp.setVerbose(true);
+    auto f = cmp.compileFunction(fun);
+    cmp.optimizeModule();
+    return std::pair<pir::Function*, pir::Module*>(f, m);
 }
 
 using namespace rir::pir;
@@ -37,8 +40,9 @@ typedef std::pair<std::string, TestFunction> Test;
     }
 
 bool test42(const std::string& input) {
-    auto m = compile(input);
-    auto f = m->functions.front()->dstFunction;
+    auto res = compile(input);
+    auto f = res.first;
+    auto m = res.second;
 
     CHECK(Query::noEnv(f));
 
@@ -59,19 +63,22 @@ class NullBuffer : public std::ostream {
 };
 
 bool verify(Module* m) {
-    for (auto f : m->functions)
-        if (!Verify::apply(f->dstFunction))
-            return false;
+    bool success = true;
+    m->eachPirFunction([&success](pir::Module::VersionedFunction& f) {
+        f.eachVersion([&success](pir::Function* f) {
+            if (!Verify::apply(f))
+                success = false;
+        });
+    });
     // TODO: find fix for osx
     // NullBuffer nb;
-    for (auto f : m->functions)
-        f->dstFunction->print(std::cout);
+    m->print(std::cout);
 
     return true;
 }
 
 bool compileAndVerify(const std::string& input) {
-    auto m = compile(input);
+    auto m = compile(input).second;
     bool t = verify(m);
     delete m;
     return t;
@@ -82,13 +89,14 @@ bool testDelayEnv() {
     //       analysis!
     // auto m = compile("{f <- function()1; arg1[[2]]}");
 
-    auto m = compile("{f <- arg1; arg1[[2]]}");
-    bool t = Visitor::check(m->functions.front()->entry,
-                            [&](Instruction* i, BB* bb) {
-                                if (i->hasEnv())
-                                    CHECK(Deopt::Cast(bb->last()));
-                                return true;
-                            });
+    auto res = compile("{f <- arg1; arg1[[2]]}");
+    auto f = res.first;
+    auto m = res.second;
+    bool t = Visitor::check(f->entry, [&](Instruction* i, BB* bb) {
+        if (i->hasEnv())
+            CHECK(Deopt::Cast(bb->last()));
+        return true;
+    });
     delete m;
     return t;
 }

@@ -5,14 +5,17 @@
 #include "rir_2_pir.h"
 
 namespace rir {
+namespace pir {
 
 class RirInlinedPromise2Rir : public Rir2Pir {
   public:
-    RirInlinedPromise2Rir(pir::Builder* builder)
-        : Rir2Pir(builder) {}
+    explicit RirInlinedPromise2Rir(Rir2Pir& functionPir2Rir, rir::Code* promise)
+        : Rir2Pir(functionPir2Rir.cmp, functionPir2Rir.insert,
+                  functionPir2Rir.srcFunction, promise) {}
 
   private:
-    void addReturn(pir::Value*);
+    void compileReturn(pir::Value*) override;
 };
+}
 }
 #endif

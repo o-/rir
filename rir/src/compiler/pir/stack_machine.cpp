@@ -41,41 +41,45 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
-                                std::vector<ReturnSite>* results) {
+void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
+    assert(pc >= srcCode->code() && pc < srcCode->endCode());
+
+    Value* env = insert.env;
+    BB* bb = insert.bb;
+
     Value* v;
     Value* x;
     Value* y;
     BC bc = this->getCurrentBC();
     switch (bc.bc) {
         case Opcode::push_:
-            push((*builder)(new LdConst(bc.immediateConst())));
+            push(insert(new LdConst(bc.immediateConst())));
             break;
         case Opcode::ldvar_:
-            v = (*builder)(new LdVar(bc.immediateConst(), builder->env));
-            push((*builder)(new Force(v)));
+            v = insert(new LdVar(bc.immediateConst(), env));
+            push(insert(new Force(v)));
             break;
         case Opcode::stvar_:
             v = pop();
-            (*builder)(new StVar(bc.immediateConst(), v, builder->env));
+            insert(new StVar(bc.immediateConst(), v, env));
             break;
         case Opcode::ldvar2_:
-            (*builder)(new LdVarSuper(bc.immediateConst(), builder->env));
+            insert(new LdVarSuper(bc.immediateConst(), env));
             break;
         case Opcode::stvar2_:
             v = pop();
-            (*builder)(new StVarSuper(bc.immediateConst(), v, builder->env));
+            insert(new StVarSuper(bc.immediateConst(), v, env));
             break;
         case Opcode::ret_:
-            results->push_back(ReturnSite(builder->bb, pop()));
+            pir2rir.addReturn(ReturnSite(bb, pop()));
             assert(empty());
             break;
         case Opcode::asbool_:
         case Opcode::aslogical_:
-            push((*builder)(new AsLogical(pop())));
+            push(insert(new AsLogical(pop())));
             break;
         case Opcode::ldfun_:
-            push((*builder)(new LdFun(bc.immediateConst(), builder->env)));
+            push(insert(new LdFun(bc.immediateConst(), env)));
             break;
         case Opcode::guard_fun_:
             std::cout << "warn: guard ignored "
@@ -107,7 +111,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             Value* x = pop();
             Value* y = pop();
             Value* z = pop();
-            push((*builder)(new MkCls(x, y, z, builder->env)));
+            push(insert(new MkCls(x, y, z, env)));
             break;
         }
         case Opcode::nop_:
@@ -117,7 +121,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             break;
         case Opcode::call_: {
             unsigned n = bc.immediate.call_args.nargs;
-            rir::CallSite* cs = bc.callSite(src->body());
+            rir::CallSite* cs = bc.callSite(srcFunction->body());
 
             std::vector<Value*> args;
             for (size_t i = 0; i < n; ++i) {
@@ -127,47 +131,48 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
                 } else if (argi == MISSING_ARG_IDX) {
                     assert(false);
                 }
-                rir::Code* promiseCode = src->codeAt(argi);
-                Promise* prom = builder->function->createProm();
+                rir::Code* promiseCode = srcFunction->codeAt(argi);
+                Promise* prom = insert.function->createProm();
                 {
-                    Builder promiseBuilder(builder->function, prom);
-                    Rir2Pir compiler(&promiseBuilder);
-                    compiler.translateCode(src, promiseCode);
+                    Builder promiseBuilder(insert.function, prom);
+                    Rir2Pir compiler(pir2rir.compiler(), promiseBuilder,
+                                     srcFunction, promiseCode);
+                    compiler.translate();
                 }
                 Value* val = Missing::instance();
                 if (Query::pure(prom)) {
-                    RirInlinedPromise2Rir compiler =
-                        RirInlinedPromise2Rir(builder);
-                    val = compiler.translateCode(src, promiseCode);
+                    RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+                    val = compiler.translate();
                 }
-                args.push_back((*builder)(new MkArg(prom, val, builder->env)));
+                args.push_back(insert(new MkArg(prom, val, env)));
             }
 
-            push((*builder)(new Call(builder->env, pop(), args)));
+            push(insert(new Call(env, pop(), args)));
             break;
         }
         case Opcode::promise_: {
             unsigned promi = bc.immediate.i;
-            rir::Code* promiseCode = src->codeAt(promi);
-            Promise* prom = builder->function->createProm();
+            rir::Code* promiseCode = srcFunction->codeAt(promi);
+            Promise* prom = insert.function->createProm();
             {
                 // What should I do with this?
-                Builder promiseBuilder(builder->function, prom);
-                Rir2Pir compiler(&promiseBuilder);
-                compiler.translateCode(src, promiseCode);
+                Builder promiseBuilder(insert.function, prom);
+                Rir2Pir compiler(pir2rir.compiler(), promiseBuilder,
+                                 srcFunction, promiseCode);
+                compiler.translate();
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(builder);
-                val = compiler.translateCode(src, promiseCode);
+                RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+                val = compiler.translate();
             }
             // TODO: Remove comment and check how to deal with
-            push((*builder)(new MkArg(prom, val, builder->env)));
+            push(insert(new MkArg(prom, val, env)));
             break;
         }
         case Opcode::static_call_stack_: {
             unsigned n = bc.immediate.call_args.nargs;
-            rir::CallSite* cs = bc.callSite(src->body());
+            rir::CallSite* cs = bc.callSite(srcFunction->body());
             SEXP target = rir::Pool::get(*cs->target());
 
             std::vector<Value*> args(n);
@@ -178,33 +183,33 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             static int vector = findBuiltin("vector");
 
             if (getBuiltinNr(target) == vector)
-                push((*builder)(new CallSafeBuiltin(target, args)));
+                push(insert(new CallSafeBuiltin(target, args)));
             else
-                push((*builder)(new CallBuiltin(builder->env, target, args)));
+                push(insert(new CallBuiltin(env, target, args)));
             break;
         }
         case Opcode::seq_: {
             auto x = pop();
             auto y = pop();
             auto z = pop();
-            push((*builder)(new Seq(x, y, z)));
+            push(insert(new Seq(x, y, z)));
             break;
         }
         case Opcode::for_seq_size_:
-            push((*builder)(new ForSeqSize(top())));
+            push(insert(new ForSeqSize(top())));
             break;
 
         case Opcode::extract1_1_: {
             Value* vec = pop();
             Value* idx = pop();
-            push((*builder)(new Extract1_1D(vec, idx)));
+            push(insert(new Extract1_1D(vec, idx)));
             break;
         }
 
         case Opcode::extract2_1_: {
             Value* vec = pop();
             Value* idx = pop();
-            push((*builder)(new Extract2_1D(vec, idx)));
+            push(insert(new Extract2_1D(vec, idx)));
             break;
         }
 
@@ -212,7 +217,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             Value* vec = pop();
             Value* idx1 = pop();
             Value* idx2 = pop();
-            push((*builder)(new Extract1_2D(vec, idx1, idx2)));
+            push(insert(new Extract1_2D(vec, idx1, idx2)));
             break;
         }
 
@@ -220,7 +225,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             Value* vec = pop();
             Value* idx1 = pop();
             Value* idx2 = pop();
-            push((*builder)(new Extract2_2D(vec, idx1, idx2)));
+            push(insert(new Extract2_2D(vec, idx1, idx2)));
             break;
         }
 
@@ -228,7 +233,7 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             Value* vec = pop();
             Value* idx = pop();
             Value* val = pop();
-            push((*builder)(new Subassign1_1D(vec, idx, val)));
+            push(insert(new Subassign1_1D(vec, idx, val)));
             break;
         }
 
@@ -236,46 +241,46 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             Value* vec = pop();
             Value* idx = pop();
             Value* val = pop();
-            push((*builder)(new Subassign2_1D(vec, idx, val)));
+            push(insert(new Subassign2_1D(vec, idx, val)));
             break;
         }
 
-        #define BINOP(Name, Op)                                                        \
-        case Opcode::Op:                                                           \
-            x = pop();                                                             \
-            y = pop();                                                             \
-            push((*builder)(new Name(x, y)));                                               \
-            break
-                BINOP(LOr, lgl_or_);
-                BINOP(LAnd, lgl_and_);
-                BINOP(Lt, lt_);
-                BINOP(Gt, gt_);
-                BINOP(Gte, le_);
-                BINOP(Lte, ge_);
-                BINOP(Mod, mod_);
-                BINOP(Div, div_);
-                BINOP(IDiv, idiv_);
-                BINOP(Add, add_);
-                BINOP(Mul, mul_);
-                BINOP(Colon, colon_);
-                BINOP(Pow, pow_);
-                BINOP(Sub, sub_);
-                BINOP(Eq, eq_);
-                BINOP(Neq, ne_);
+#define BINOP(Name, Op)                                                        \
+    case Opcode::Op:                                                           \
+        x = pop();                                                             \
+        y = pop();                                                             \
+        push(insert(new Name(x, y)));                                          \
+        break
+            BINOP(LOr, lgl_or_);
+            BINOP(LAnd, lgl_and_);
+            BINOP(Lt, lt_);
+            BINOP(Gt, gt_);
+            BINOP(Gte, le_);
+            BINOP(Lte, ge_);
+            BINOP(Mod, mod_);
+            BINOP(Div, div_);
+            BINOP(IDiv, idiv_);
+            BINOP(Add, add_);
+            BINOP(Mul, mul_);
+            BINOP(Colon, colon_);
+            BINOP(Pow, pow_);
+            BINOP(Sub, sub_);
+            BINOP(Eq, eq_);
+            BINOP(Neq, ne_);
 
-        #undef BINOP
-        #define UNOP(Name, Op)                                                         \
-        case Opcode::Op:                                                           \
-            v = pop();                                                             \
-            push((*builder)(new Name(v)));                                                  \
-            break
-                UNOP(Plus, uplus_);
-                UNOP(Minus, uminus_);
-                UNOP(Inc, inc_);
-                UNOP(Not, not_);
-                UNOP(Is, is_);
-                UNOP(Length, length_);
-        #undef UNOP
+#undef BINOP
+#define UNOP(Name, Op)                                                         \
+    case Opcode::Op:                                                           \
+        v = pop();                                                             \
+        push(insert(new Name(v)));                                             \
+        break
+            UNOP(Plus, uplus_);
+            UNOP(Minus, uminus_);
+            UNOP(Inc, inc_);
+            UNOP(Not, not_);
+            UNOP(Is, is_);
+            UNOP(Length, length_);
+#undef UNOP
 
         case Opcode::pick_:
             push(at(bc.immediate.i));
@@ -318,6 +323,9 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             assert(false);
 
         // Unsupported opcodes:
+        case Opcode::make_env_:
+        case Opcode::get_env_:
+        case Opcode::set_env_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::ldlval_:
@@ -337,19 +345,17 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             assert(false);
             break;
     }
-    this->consumeBC(src->body()->endCode());
 }
 
-bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
+bool StackMachine::doMerge(Opcode* trg, Builder& builder, StackMachine* other) {
     if (other->entry == nullptr) {
-        other->entry = builder->createBB();
+        other->entry = builder.createBB();
         other->pc = trg;
-        other->currentBC = this->getCurrentBC();
         for (size_t i = 0; i < stack_size(); ++i) {
             auto v = stack.at(i);
             auto p = new Phi;
             other->entry->append(p);
-            p->addInput(builder->bb, v);
+            p->addInput(builder.bb, v);
             other->push(p);
         }
 
@@ -363,7 +369,7 @@ bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
         assert(p);
         Value* incom = stack.at(i);
         if (incom != p) {
-            p->addInput(builder->bb, incom);
+            p->addInput(builder.bb, incom);
         }
     }
     return false;
@@ -373,25 +379,13 @@ Opcode* StackMachine::getPC() { return pc; }
 
 void StackMachine::setPC(Opcode* opcode) { 
     pc = opcode;
-    this->decodeCurrentBytecode();
 }
 
 pir::BB* StackMachine::getEntry() { return entry; }
 void StackMachine::setEntry(pir::BB* ent) {entry = ent; }
 
-void StackMachine::consumeBC(Opcode* end) {
-    this->advancePC();
-    if (pc != end) this->decodeCurrentBytecode();
-}
+void StackMachine::advancePC() { BC::advance(&pc); }
 
-void StackMachine::decodeCurrentBytecode() {
-    this->currentBC = BC(this->pc);
-}
-
-void StackMachine::advancePC() {
-    pc = (Opcode*)((uintptr_t)(pc) + this->currentBC.size());
-}
-
-BC StackMachine::getCurrentBC() { return this->currentBC; }
+BC StackMachine::getCurrentBC() { return BC::decode(pc); }
 }
 }

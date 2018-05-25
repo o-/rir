@@ -6,53 +6,56 @@
 #include <unordered_map>
 
 namespace rir {
+namespace pir {
 
-template <size_t SIZE>
-struct Matcher {
-    const std::array<Opcode, SIZE> seq;
+class Rir2PirCompiler {
+  public:
+    Rir2PirCompiler(Module* module) : module(module) {}
+    Function* compileFunction(SEXP);
+    Function* compileFunction(rir::Function*, const std::vector<SEXP>&);
+    void optimizeModule();
+    Module* getModule() { return module; }
 
-    typedef std::function<void(Opcode*)> MatcherMaybe;
+    bool isVerbose() { return verbose; }
+    void setVerbose(bool v) { verbose = v; }
 
-    bool operator()(Opcode* pc, Opcode* end, MatcherMaybe m) const {
-        for (size_t i = 0; i < SIZE; ++i) {
-            if (*pc != seq[i])
-                return false;
-            BC::advance(&pc);
-            if (pc == end)
-                return false;
-        }
-        m(pc);
-        return true;
-    }
+  private:
+    bool verbose = false;
+    Module* module;
 };
 
 class Rir2Pir : public PirTranslator {
   public:
-    Rir2Pir()
-        : PirTranslator(), mergepoint(), state(), builder(nullptr) {}
-    Rir2Pir(pir::Module* module)
-        : PirTranslator(module), mergepoint(), state(), builder(nullptr) {}
-    Rir2Pir(pir::Builder* builder)
-        : PirTranslator(), mergepoint(), state(), builder(builder) {}
-    pir::Function* compileFunction(SEXP);
-    pir::Function* compileFunction(Function*, std::vector<SEXP>);
-    pir::Value* translateCode(rir::Function*, rir::Code*);
-    void optimizeFunction(pir::Function*);
-    pir::Module* compileModule(SEXP f);
-    
-    /*static pir::IRTransformation* declare(SEXP&);
-    static pir::IRTransformation* declare(rir::Function*);
-    static pir::IRTransformation* declare(rir::Function*, rir::Code*);*/
+    Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
+            rir::Code* srcCode)
+        : PirTranslator(cmp.isVerbose()), insert(insert), cmp(cmp),
+          srcFunction(srcFunction), srcCode(srcCode) {}
+
+    Value* translate();
+
+    typedef StackMachine::ReturnSite ReturnSite;
+    void addReturn(ReturnSite r) { results.push_back(r); }
+
+    Rir2PirCompiler& compiler() { return cmp; }
+
   private:
-    std::unordered_map<Opcode*, pir::StackMachine> mergepoint;
-    pir::StackMachine state;
-    pir::Builder* builder;
+    bool done = false;
+
+    Builder& insert;
+    Rir2PirCompiler& cmp;
+
+    rir::Function* srcFunction;
+    rir::Code* srcCode;
+
+    std::unordered_map<Opcode*, StackMachine> mergepoint;
+    std::vector<ReturnSite> results;
+
     void recoverCFG(rir::Code*);
-    bool doMerge(Opcode* trg, pir::Builder*);
-    void popFromWorklist(std::deque<pir::StackMachine>*, pir::Builder*);
-    void addReturn(pir::Value*);
-    pir::Function* compileInnerFunction(Function*, std::vector<SEXP>);
-    pir::Builder* getBuilder();
+    bool doMerge(Opcode* trg);
+    virtual void compileReturn(Value*);
+
+    friend class RirInlinedPromise2Rir;
 };
+}
 }
 #endif
