@@ -107,9 +107,8 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = false;
         cs->hasNames = hasNames;
-        cs->hasSelector = (bc == Opcode::dispatch_stack_eager_);
-        cs->hasTarget = (bc == Opcode::static_call_stack_eager_ ||
-                         bc == Opcode::static_call_stack_promised_);
+        cs->hasSelector = (bc == Opcode::dispatch_eager_);
+        cs->hasTarget = (bc == Opcode::static_call_);
         cs->hasImmediateArgs = false;
 
         cs->signature = signature;
@@ -120,11 +119,10 @@ class CodeStream {
             }
         }
 
-        if (bc == Opcode::dispatch_stack_eager_) {
+        if (bc == Opcode::dispatch_eager_) {
             assert(TYPEOF(targOrSelector) == SYMSXP);
             *cs->selector() = Pool::insert(targOrSelector);
-        } else if (bc == Opcode::static_call_stack_eager_ ||
-                   bc == Opcode::static_call_stack_promised_) {
+        } else if (bc == Opcode::static_call_) {
             assert(TYPEOF(targOrSelector) == CLOSXP ||
                    TYPEOF(targOrSelector) == BUILTINSXP);
             *cs->target() = Pool::insert(targOrSelector);
@@ -164,7 +162,7 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = true;
         cs->hasNames = hasNames;
-        cs->hasSelector = (bc == Opcode::dispatch_);
+        cs->hasSelector = (bc == Opcode::dispatch_implicit_);
         cs->hasImmediateArgs = true;
 
         cs->signature = signature;
@@ -177,7 +175,7 @@ class CodeStream {
             ++i;
         }
 
-        if (bc == Opcode::dispatch_) {
+        if (bc == Opcode::dispatch_implicit_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
             *cs->selector() = Pool::insert(selector);
@@ -203,7 +201,7 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        assert(b.bc != Opcode::call_);
+        assert(b.bc != Opcode::call_implicit_);
         if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }

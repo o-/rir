@@ -103,51 +103,39 @@ DEF_INSTR(stloc_, 1, 1, 0, 1)
 DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
- * call_:: Takes a list of code objects, which represent the arguments,
+ * call_implicit_:: Takes a list of code objects, which represent the arguments,
  *         decides on eager/lazy evaluation and does the right thing
  *         with the code objs.
  *         Expects the callee on TOS.
  */
-DEF_INSTR(call_, 2, 1, 1, 0)
+DEF_INSTR(call_implicit_, 2, 1, 1, 0)
 
 /**
- * call_stack_promised_:: Like call_, but expects promised arguments on the
- * stack on top of the callee.
- */
-DEF_INSTR(call_stack_promised_, 2, -1, 1, 0)
-
-/**
- * call_stack_eager_:: Like call_, but expects eager arguments on the stack
+ * call_:: Like call_implicit_, but expects eager arguments on the stack
  *               on top of the callee.
  */
-DEF_INSTR(call_stack_eager_, 2, -1, 1, 0)
+DEF_INSTR(call_, 2, -1, 1, 0)
 
 /**
- * static_call_stack_promised_:: Like static_call_stack_, but expects promised
- *                           arguments on the stack.
- */
-DEF_INSTR(static_call_stack_promised_, 2, -1, 1, 0)
-
-/**
- * static_call_stack_eager_:: Like call_stack_, but the callee is known
+ * static_call_:: Like call_implicit_stack_, but the callee is known
  * statically and accessed through the callsite (immediate arg), not on the
  * stack.
  */
-DEF_INSTR(static_call_stack_eager_, 2, -1, 1, 0)
+DEF_INSTR(static_call_, 2, -1, 1, 0)
 
 /**
- * dispatch_:: Similar to call_, but also looks for the callee (the selector
- *             is accessed through the callsite immediate).
- *             Expects the receiver on TOS.
+ * dispatch_implicit_:: Similar to call_implicit_, but also looks for the callee
+ * (the selector is accessed through the callsite immediate). Expects the
+ * receiver on TOS.
  */
-DEF_INSTR(dispatch_, 2, 1, 1, 0)
+DEF_INSTR(dispatch_implicit_, 2, 1, 1, 0)
 
 /**
- * dispatch_stack_eager_:: Similar to dispatch_, but expects the receiver and
+ * dispatch_eager_:: Similar to dispatch_implicit_, but expects the receiver and
  *                   all other args on the stack.
  *                   Note: nargs includes the receiver!
  */
-DEF_INSTR(dispatch_stack_eager_, 2, -1, 1, 0)
+DEF_INSTR(dispatch_eager_, 2, -1, 1, 0)
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack

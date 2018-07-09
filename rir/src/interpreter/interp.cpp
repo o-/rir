@@ -1538,7 +1538,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(call_) {
+        INSTRUCTION(call_implicit_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1558,7 +1558,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(call_stack_eager_) {
+        INSTRUCTION(call_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1578,7 +1578,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(static_call_stack_eager_) {
+        INSTRUCTION(static_call_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1599,48 +1599,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(call_stack_promised_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // Stack contains [callee, arg1, ..., argn]
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), false,
-                             ostack_cell_at(ctx, n - 1), getenv(), ctx);
-            res = doCall(call, ctx);
-            ostack_popn(ctx, n + 1);
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(static_call_stack_promised_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // Stack contains [arg1, ..., argn], callee is immediate
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
-            CallContext call(c, id, callee, false, ostack_cell_at(ctx, n - 1),
-                             getenv(), ctx);
-            res = doCall(call, ctx);
-            ostack_popn(ctx, n);
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() + 1 == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(dispatch_) {
+        INSTRUCTION(dispatch_implicit_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1660,7 +1619,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(dispatch_stack_eager_) {
+        INSTRUCTION(dispatch_eager_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
