@@ -12,9 +12,8 @@
 #include "interpreter/interp.h"
 #include "interpreter/interp_context.h"
 #include "ir/BC.h"
+#include "ir/CodeEditor.h"
 #include "ir/Compiler.h"
-
-#include "utils/Printer.h"
 
 #include <memory>
 
