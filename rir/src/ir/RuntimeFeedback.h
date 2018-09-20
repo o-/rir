@@ -69,7 +69,9 @@ struct TypeFeedback {
         }
     }
 
-    bool observedObject() {
+    bool empty() const { return numTypes > 0; }
+
+    bool observedObject() const {
         for (const auto& record : seen) {
             if (record.isObj()) {
                 return true;
