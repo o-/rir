@@ -973,7 +973,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                compiler.compile(call->cls(), call->origin(), dryRun);
+                compiler.compile(call->cls(), call->origin(), dryRun, true);
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
                 break;
@@ -1211,18 +1211,20 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
+void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun,
+                              bool recompile) {
     if (done.count(cls))
         return;
+
     // Avoid recursivly compiling the same closure
     done.insert(cls);
 
     auto table = DispatchTable::unpack(BODY(origin));
-    if (table->available(1))
+    if (table->available(1) && !recompile)
         return;
 
     auto& log = logger.get(cls);
-    Pir2Rir pir2rir(*this, cls, origin, dryRun, logger.get(cls));
+    Pir2Rir pir2rir(*this, cls, origin, dryRun, log);
     auto fun = pir2rir.finalize();
 
     if (dryRun)
