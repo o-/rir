@@ -208,16 +208,6 @@ bool canRemoveEnvironment(const std::string& input) {
     return t;
 }
 
-bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
-    pir::Module m;
-    compile("", input, &m);
-    bool t = verify(&m);
-    m.eachPirFunction([&t](pir::Closure* f) {
-        t = t && (Query::noEnv(f) || Query::envOnlyBeforeDeopt(f));
-    });
-    return t;
-}
-
 bool testSuperAssign() {
     auto hasAssign = [](pir::Closure* f) {
         return !Visitor::check(f->entry, [](Instruction* i) {
@@ -387,11 +377,6 @@ static Test tests[] = {
     Test("binop_nonobjects",
          []() {
              return canRemoveEnvironmentIfTypeFeedback("f <- function() 1 + 2");
-         }),
-    Test("binop_nonobjects_nofeedback",
-         []() {
-             return !canRemoveEnvironmentIfNonTypeFeedback(
-                 "f <- function() 1 + 2");
          }),
     Test("super_assign", &testSuperAssign),
     Test("loop",

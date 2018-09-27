@@ -125,6 +125,51 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     return mergepoints;
 }
 
+static bool valueMaybeObject(Value* v) {
+    if (auto c = LdConst::Cast(v)) {
+        return OBJECT(c->c);
+    }
+    return true;
+}
+
+static bool valueSeenObject(
+    Value* v,
+    const std::unordered_map<Value*, rir::TypeFeedback>& typeFeedback) {
+    if (auto c = LdConst::Cast(v)) {
+        return OBJECT(c->c);
+    }
+    return typeFeedback.count(v) && typeFeedback.at(v).observedObject();
+}
+
+template <typename Instruction>
+static void
+genericBinop(Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
+             const std::unordered_map<Value*, rir::TypeFeedback>& typeFeedback,
+             unsigned srcIdx) {
+    auto rhs = stack.at(0);
+    auto lhs = stack.at(1);
+    bool rhsSeenObj = valueSeenObject(rhs, typeFeedback);
+    bool rhsMaybeObj = valueMaybeObject(rhs);
+    bool lhsSeenObj = valueSeenObject(lhs, typeFeedback);
+    bool lhsMaybeObj = valueMaybeObject(lhs);
+
+    if (rhsSeenObj || lhsSeenObj) {
+        stack.pop(2);
+        stack.push(insert(new Instruction(lhs, rhs, insert.env, srcIdx)));
+    } else {
+        if (lhsMaybeObj) {
+            Value* leftIsObj = insert(new IsObject(lhs));
+            insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);
+        }
+        if (rhsMaybeObj) {
+            Value* rightIsObj = insert(new IsObject(rhs));
+            insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);
+        }
+        stack.pop(2);
+        stack.push(insert(new Instruction(lhs, rhs, Env::elided(), srcIdx)));
+    }
+};
+
 } // namespace
 
 namespace rir {
@@ -439,24 +484,7 @@ bool Rir2Pir::compileBC(
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-        auto rhs = at(0);                                                      \
-        auto lhs = at(1);                                                      \
-        if (typeFeedback[rhs].numTypes > 0 &&                                  \
-            typeFeedback[lhs].numTypes > 0 &&                                  \
-            !typeFeedback[rhs].observedObject() &&                             \
-            !typeFeedback[lhs].observedObject()) {                             \
-            Value* leftIsObj = insert(new IsObject(lhs));                      \
-            insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);    \
-            Value* rightIsObj = insert(new IsObject(rhs));                     \
-            insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);   \
-            pop();                                                             \
-            pop();                                                             \
-            push(insert(new Name(lhs, rhs, Env::elided(), srcIdx)));           \
-        } else {                                                               \
-            pop();                                                             \
-            pop();                                                             \
-            push(insert(new Name(lhs, rhs, env, srcIdx)));                     \
-        }                                                                      \
+        genericBinop<Name>(pos, srcCode, stack, insert, typeFeedback, srcIdx); \
         break;                                                                 \
     }
 

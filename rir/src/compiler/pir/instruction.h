@@ -1077,6 +1077,8 @@ struct RirStack {
 
   public:
     void push(Value* v) { stack.push_back(v); }
+    void pop(size_t n) { stack.resize(stack.size() - n); }
+
     Value* pop() {
         assert(!empty());
         auto v = stack.back();
