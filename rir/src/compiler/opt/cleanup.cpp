@@ -130,20 +130,24 @@ class TheCleanup {
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->isJmp() && cfg.hasSinglePred(bb->next0) &&
+            if (bb->isJmp() && cfg.hasSinglePred(bb->next0)) {
                 /* this condition keeps graph in split-edge: */
-                cfg.hasSinglePred(bb) &&
-                cfg.immediatePredecessors(bb)[0]->isJmp()) {
-                BB* d = bb->next0;
-                while (!d->isEmpty()) {
-                    d->moveToEnd(d->begin(), bb);
+                if (cfg.hasSinglePred(bb) &&
+                    cfg.immediatePredecessors(bb)[0]->isJmp()) {
+                    BB* d = bb->next0;
+                    while (!d->isEmpty()) {
+                        d->moveToEnd(d->begin(), bb);
+                    }
+                    bb->next0 = d->next0;
+                    bb->next1 = d->next1;
+                    d->next0 = nullptr;
+                    d->next1 = nullptr;
+                    fixupPhiInput(d, bb);
+                    toDel[d] = nullptr;
+                } else {
+                    while (!bb->isEmpty())
+                        bb->moveToBegin(bb->end() - 1, bb->next0);
                 }
-                bb->next0 = d->next0;
-                bb->next1 = d->next1;
-                d->next0 = nullptr;
-                d->next1 = nullptr;
-                fixupPhiInput(d, bb);
-                toDel[d] = nullptr;
             }
         });
         Visitor::run(function->entry, [&](BB* bb) {
