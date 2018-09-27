@@ -419,7 +419,7 @@ class VarLenInstructionWithEnvSlot
         Super::pushArg(env, RType::env);
     }
 
-    void pushArg(Value* a, PirType t) override final {
+    void pushArg(Value* a, PirType t) override {
         assert(a);
         assert(args_.size() > 0);
         assert(args_.back().type() == RType::env);
@@ -427,7 +427,7 @@ class VarLenInstructionWithEnvSlot
         args_.push_back(args_.back());
         args_[args_.size() - 2] = InstrArg(a, t);
     }
-    void popArg() override final {
+    void popArg() override {
         assert(args_.size() > 1);
         assert(args_.back().type() == RType::env);
         args_[args_.size() - 2] = args_[args_.size() - 1];
@@ -1118,20 +1118,36 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
             pushArg(v);
     }
 
+    void updateNext(Safepoint* s) {
+        assert(inlined);
+        assert(arg(stackSize).type() == NativeType::safepoint);
+        arg(stackSize).val() = s;
+    }
+
     void next(Safepoint* s) {
         assert(!inlined);
         inlined = true;
         pushArg(s, NativeType::safepoint);
     }
 
-    Safepoint* next() {
+    Safepoint* next() const {
         if (inlined) {
-            auto r = Cast(arg(nargs() - 2).val());
+            auto r = Cast(arg(stackSize).val());
             assert(r);
             return r;
         } else {
             return nullptr;
         }
+    }
+
+    Value* tos() { return arg(stackSize - 1).val(); }
+
+    void popStack() {
+        stackSize--;
+        // Move the next() ptr
+        if (inlined)
+            arg(stackSize) = arg(stackSize + 1);
+        popArg();
     }
 
     void printArgs(std::ostream& out, bool tty) override;
