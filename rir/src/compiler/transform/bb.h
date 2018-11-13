@@ -20,8 +20,6 @@ class BBTransform {
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock);
-    static BB* addCheckpoint(Code* closure, BB* src,
-                             BB::Instrs::iterator position);
     static void removeBBsWithChildren(DominanceGraph& dom, Code* code,
                                       const std::set<BB*>& toDelete);
     static void removeBBs(Code* code, const std::set<BB*>& toDelete);
