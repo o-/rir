@@ -109,7 +109,7 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
         }
     });
 
-    std::unordered_set<BB*> toDelete;
+    std::set<BB*> toDelete;
     // Find all dead basic blocks
     for (auto e : branchRemoval) {
         auto bb = e.first;

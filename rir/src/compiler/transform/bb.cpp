@@ -120,12 +120,12 @@ BB* BBTransform::addCheckpoint(Code* code, BB* src,
 }
 
 void BBTransform::removeBBsWithChildren(
-    DominanceGraph& dom, Code* code, const std::unordered_set<BB*>& toDelete_) {
-    std::unordered_set<BB*> toDelete;
+    DominanceGraph& dom, Code* code, const std::set<BB*>& toDelete_) {
+    std::set<BB*> toDelete;
 
     for (auto bb : toDelete_) {
         Visitor::run(bb, [&](BB* child) {
-            if (dom.dominates(child, bb))
+            if (dom.dominates(bb, child))
                 toDelete.insert(child);
         });
         toDelete.insert(bb);
@@ -134,7 +134,7 @@ void BBTransform::removeBBsWithChildren(
 }
 
 void BBTransform::removeBBs(Code* code,
-                            const std::unordered_set<BB*>& toDelete) {
+                            const std::set<BB*>& toDelete) {
     // Dead code can still appear as phi inputs in live blocks
     Visitor::run(code->entry, [&](BB* bb) {
         for (auto i : *bb) {

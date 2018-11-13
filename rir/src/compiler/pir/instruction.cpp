@@ -81,6 +81,22 @@ void Instruction::print(std::ostream& out, bool tty) {
     printEnv(out, tty);
 }
 
+void Phi::removeInputs(const std::set<BB*>& del) {
+    auto ii = input.begin();
+    auto ai = args_.begin();
+    while (ii != input.end()) {
+            ai->val()->printRef(std::cerr);
+        if (std::find(del.begin(), del.end(), *ii) != del.end()) {
+            ii = input.erase(ii);
+            ai = args_.erase(ai);
+        } else {
+            ii++;
+            ai++;
+        }
+    }
+    assert(ai == args_.end());
+}
+
 void Instruction::printEnv(std::ostream& out, bool tty) {
     if (hasEnv()) {
         if (tty) {
