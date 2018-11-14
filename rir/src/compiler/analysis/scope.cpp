@@ -102,6 +102,10 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         if (auto call = Call::Cast(i)) {
             auto trg = call->cls()->baseValue();
             assert(trg);
+            if (auto ldf = LdFun::Cast(trg)) {
+                auto val = state.envs.get(ldf->env(), ldf->varName);
+                val.result.ifSingleValue([&](Value* v) { trg = v; });
+            }
             MkFunCls* cls = state.envs.findClosure(call->callerEnv(), trg);
             if (cls != AbstractREnvironment::UnknownClosure) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
