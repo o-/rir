@@ -11,7 +11,7 @@ namespace pir {
 void CleanupCheckpoints::apply(RirCompiler&, Closure* function,
                                LogStream&) const {
     auto apply = [](Code* code) {
-        std::set<BB*> toDelete;
+        std::unordered_set<BB*> toDelete;
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;

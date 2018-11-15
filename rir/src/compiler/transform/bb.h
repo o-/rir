@@ -5,8 +5,6 @@
 #include "../pir/pir.h"
 #include "../util/cfg.h"
 
-#include <set>
-
 namespace rir {
 namespace pir {
 
@@ -21,8 +19,8 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock);
     static void removeBBsWithChildren(DominanceGraph& dom, Code* code,
-                                      const std::set<BB*>& toDelete);
-    static void removeBBs(Code* code, const std::set<BB*>& toDelete);
+                                      const std::unordered_set<BB*>& toDelete);
+    static void removeBBs(Code* code, const std::unordered_set<BB*>& toDelete);
 };
 } // namespace pir
 } // namespace rir

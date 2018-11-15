@@ -81,11 +81,11 @@ void Instruction::print(std::ostream& out, bool tty) {
     printEnv(out, tty);
 }
 
-void Phi::removeInputs(const std::set<BB*>& del) {
+void Phi::removeInputs(const std::unordered_set<BB*>& del) {
     auto ii = input.begin();
     auto ai = args_.begin();
     while (ii != input.end()) {
-        if (std::find(del.begin(), del.end(), *ii) != del.end()) {
+        if (del.count(*ii)) {
             ii = input.erase(ii);
             ai = args_.erase(ai);
         } else {

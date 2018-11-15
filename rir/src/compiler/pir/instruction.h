@@ -19,7 +19,6 @@
 #include <functional>
 #include <iostream>
 #include <unordered_set>
-#include <set>
 
 /*
  * This file provides implementations for all instructions
@@ -1228,7 +1227,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         input.push_back(in);
         args_.push_back(InstrArg(arg, arg->type));
     }
-    void removeInputs(const std::set<BB*>& del);
+    void removeInputs(const std::unordered_set<BB*>& del);
 
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
