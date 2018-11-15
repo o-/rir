@@ -96,10 +96,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         : StaticAnalysis("ForceDominance", cls, log) {}
 
     void apply(ForcedBy& d, Instruction* i) const override {
-        auto f = Force::Cast(i);
-        if (f) {
-            MkArg* arg = MkArg::Cast(i->baseValue());
-            if (arg)
+        if (auto f = Force::Cast(i)) {
+            if (MkArg* arg = MkArg::Cast(i->baseValue()))
                 d.forcedAt(arg, f);
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
@@ -148,7 +146,7 @@ class ForceDominanceAnalysisResult {
             if (deopt)
                 return false;
         }
-        return exit.count(a) && exit.at(a) != ForcedBy::ambiguous();
+        return true;
     }
     bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
     void mapToDominator(Force* f, std::function<void(Force* f)> action) {
