@@ -203,6 +203,10 @@ class StaticAnalysis {
                         done = false;
                         changed[bb->trueBranch()->id] = true;
                     } else {
+                        if (debug >= DebugLevel::Merge) {
+                            log << "===== State to merge is:\n";
+                            log(state);
+                        }
                         if (mergepoint[bb->trueBranch()->id][0].merge(state)) {
                             if (debug >= DebugLevel::Merge) {
                                 log << "===== Merging into trueBranch BB"
@@ -225,6 +229,10 @@ class StaticAnalysis {
                         done = false;
                         changed[bb->falseBranch()->id] = true;
                     } else {
+                        if (debug >= DebugLevel::Merge) {
+                            log << "===== State to merge is:\n";
+                            log(state);
+                        }
                         if (mergepoint[bb->falseBranch()->id][0].merge(state)) {
                             if (debug >= DebugLevel::Merge) {
                                 log << "===== Merging into falseBranch BB"
