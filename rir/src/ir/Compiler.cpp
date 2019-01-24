@@ -830,7 +830,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
         cs << BC::callImplicit(callArgs, names, ast, {});
     } else {
         cs << BC::callImplicit(callArgs, ast,
-                               Assumption::CorrectOrderOfArguments);
+                               {Assumption::CorrectOrderOfArguments});
     }
 }
 
