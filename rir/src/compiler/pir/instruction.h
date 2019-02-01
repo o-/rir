@@ -1075,7 +1075,7 @@ class CallInstruction {
     virtual Closure* tryGetCls() const { return nullptr; }
     Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
-    ClosureVersion* dispatch(Closure*) const;
+    ClosureVersion* tryDispatch(Closure*) const;
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -1187,9 +1187,9 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
 
-    ClosureVersion* dispatch() const;
+    ClosureVersion* tryDispatch() const;
 
-    ClosureVersion* optimisticDispatch() const;
+    ClosureVersion* tryOptimisticDispatch() const;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
