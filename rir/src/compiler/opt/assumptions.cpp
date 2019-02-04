@@ -22,31 +22,34 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             auto instr = *ip;
 
             if (auto assume = Assume::Cast(instr)) {
-                auto cp = assume->checkpoint();
-                auto bb = cp->bb();
-                // We are trying to group multiple assumes into the same
-                // checkpoint by finding for each assume the topmost compatible
-                // checkpoint.
-                // TODO: we could also try to move up the assume itself, since
-                // if we move both at the same time, we could even jump over
-                // effectful instructions.
-                while (true) {
-                    if (!cfg.hasSinglePred(bb))
-                        break;
+                assume->arg<0>().val() =
+                  assume->assumeTrue ? (Value*)True::instance() : (Value*)False::instance();
 
-                    bool hasEffect = false;
-                    for (auto i : *bb)
-                        if (i->hasEffect())
-                            hasEffect = true;
-                    if (hasEffect)
-                        break;
-                    bb = cfg.immediatePredecessors(bb).front();
+                // auto cp = assume->checkpoint();
+                // auto bb = cp->bb();
+                // // We are trying to group multiple assumes into the same
+                // // checkpoint by finding for each assume the topmost compatible
+                // // checkpoint.
+                // // TODO: we could also try to move up the assume itself, since
+                // // if we move both at the same time, we could even jump over
+                // // effectful instructions.
+                // while (true) {
+                //     if (!cfg.hasSinglePred(bb))
+                //         break;
 
-                    if (!bb->isEmpty())
-                        if (auto prevCp = Checkpoint::Cast(bb->last()))
-                            cp = prevCp;
-                }
-                assume->checkpoint(cp);
+                //     bool hasEffect = false;
+                //     for (auto i : *bb)
+                //         if (i->hasEffect())
+                //             hasEffect = true;
+                //     if (hasEffect)
+                //         break;
+                //     bb = cfg.immediatePredecessors(bb).front();
+
+                //     if (!bb->isEmpty())
+                //         if (auto prevCp = Checkpoint::Cast(bb->last()))
+                //             cp = prevCp;
+                // }
+                // assume->checkpoint(cp);
             }
 
             ip = next;

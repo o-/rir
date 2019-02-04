@@ -527,7 +527,7 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
+class FLIE(LdFun, 2, Effect::Any, EnvAccess::Read) {
   public:
     SEXP varName;
 
@@ -822,7 +822,7 @@ class FLIE(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::val().scalar(),
                                          {{PirType::val(), PirType::val()}},
-                                         {{vec, idx}}, env, srcIdx) {}
+                                         {{vec, idx}}, Env::elided(), srcIdx) {}
 };
 
 class FLIE(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
@@ -1088,7 +1088,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          Value* fs, unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
+        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), Env::elided(),
                                        srcIdx) {
         assert(fs);
         pushArg(fs, NativeType::frameState);

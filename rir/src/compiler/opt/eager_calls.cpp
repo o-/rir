@@ -28,8 +28,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             ClosureVersion* version = call->tryDispatch();
 
             if (!version ||
-                !version->properties.includes(
-                    ClosureVersion::Property::IsEager) ||
+                //!version->properties.includes(
+                //    ClosureVersion::Property::IsEager) ||
                 call->nCallArgs() != cls->nargs())
                 continue;
 
@@ -97,6 +97,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
 
                 Value* promRes = BBTransform::forInline(prom_copy, split);
                 mk->eagerArg(promRes);
+                mk->replaceUsesWith(promRes);
 
                 bb = split;
                 ip = bb->begin();

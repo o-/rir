@@ -37,6 +37,7 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                             if (v->type.maybeObj())
                                 noObjects = false;
                     });
+                    noObjects = true;
 
                     if (noObjects &&
                         SafeBuiltinsList::nonObject(b->builtinId)) {
@@ -61,7 +62,7 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                 }
 
                 if (auto force = Force::Cast(i)) {
-                    if (!force->input()->type.maybeLazy())
+                    //if (!force->input()->type.maybeLazy())
                         force->elideEnv();
                 }
             }
