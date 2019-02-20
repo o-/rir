@@ -1332,6 +1332,23 @@ void Pir2Rir::lower(Code* code) {
                             }
                         }
                     }
+
+#ifdef ENABLE_SLOWASSERT
+                    {
+                    bool ok = true;
+                    phi->eachArg([&](BB* inputBB, Value*) {
+                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
+                            ok = false;
+                    });
+                    if (!ok) {
+                      code->printCode(std::cout, true);
+                      phi->printRef(std::cout);
+                      std::cout << "\n";
+                    }
+
+                    assert(ok);
+                    }
+#endif
                 }
             });
         } while (!done);

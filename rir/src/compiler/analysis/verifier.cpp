@@ -176,7 +176,9 @@ class TheVerifier {
             if (auto iv = Instruction::Cast(v)) {
                 if (phi) {
                     if (slow &&
-                        !cfg(bb->owner).isPredecessor(iv->bb(), i->bb())) {
+                        (!cfg(bb->owner).isPredecessor(iv->bb(), i->bb()) ||
+                         // If a block can be it's own predecessor (loop). But then the input must come after the phi!
+                         (iv->bb() == i->bb() && i->bb()->indexOf(iv) < i->bb()->indexOf(i)))) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
