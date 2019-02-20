@@ -1277,14 +1277,14 @@ void Pir2Rir::lower(Code* code) {
                         BreadthFirstVisitor::checkBackward(
                             phi->bb(), cfg, [&](BB* bb) {
                                 if (bb == inputBB) {
-                                    src[dir[bb]].insert(val);
+                                    src[dir.at(bb)].insert(val);
                                     return false;
                                 }
                                 if (inputBBs.count(bb) == 0) {
                                     for (auto pred :
                                          cfg.immediatePredecessors(bb))
                                         if (dir.count(pred) == 0)
-                                            dir[pred] = dir[bb];
+                                            dir[pred] = dir.at(bb);
                                 }
                                 return true;
                             });
