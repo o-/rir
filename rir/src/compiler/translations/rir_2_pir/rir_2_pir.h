@@ -50,12 +50,12 @@ class Rir2Pir {
 
     typedef std::unordered_map<Value*, ObservedCallees> CallTargetFeedback;
 
-    bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
+    bool compileBC(const BC& bc, uint8_t* pos, uint8_t* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
                    CallTargetFeedback&) const;
     virtual bool inPromise() const { return inPromise_; }
 
-    Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
+    Checkpoint* addCheckpoint(rir::Code* srcCode, uint8_t* pos,
                               const RirStack& stack, Builder& insert) const;
 
   private:

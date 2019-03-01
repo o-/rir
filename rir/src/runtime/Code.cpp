@@ -3,6 +3,7 @@
 #include "R/Printing.h"
 #include "ir/BC.h"
 #include "utils/Pool.h"
+#include "interpreter/interp.h"
 
 #include <iomanip>
 #include <sstream>
@@ -16,20 +17,21 @@ Code::Code(FunctionSEXP fun, SEXP ast, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      funInvocationCount(0), src(src_pool_add(globalContext(), ast)),
-      stackLength(0), localsCount(localsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      threaded(false), funInvocationCount(0),
+      src(src_pool_add(globalContext(), ast)), stackLength(0),
+      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
 }
 
-unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
+unsigned Code::getSrcIdxAt(const uint8_t* pc, bool allowMissing) const {
     if (srcLength == 0) {
         assert(allowMissing);
         return 0;
     }
 
     SrclistEntry* sl = srclist();
-    Opcode* start = code();
+    uint8_t* start = code();
     auto pcOffset = pc - start;
 
     if (srcLength == 1) {
@@ -62,9 +64,10 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
-    Opcode* pc = code();
+    decodeInstructions(const_cast<Code*>(this));
+    uint8_t* pc = code();
     size_t label = 0;
-    std::map<Opcode*, size_t> targets;
+    std::map<uint8_t*, size_t> targets;
     targets[pc] = label++;
     while (pc < endCode()) {
         if (BC::decodeShallow(pc).isJmp()) {
@@ -145,6 +148,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         ss << prefix << i << ".";
         c->disassemble(out, ss.str());
     }
+    encodeInstructions(const_cast<Code*>(this));
 }
 
 void Code::print(std::ostream& out) const {

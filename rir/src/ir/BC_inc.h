@@ -53,7 +53,7 @@ namespace rir {
 // ==== BC types
 //
 
-enum class Opcode : uint8_t {
+enum class Opcode : uint64_t {
 
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
@@ -141,10 +141,10 @@ class BC {
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
-    static Immediate readImmediate(Opcode** pc) {
+    static Immediate readImmediate(uint8_t** pc) {
         Immediate i;
         memcpy(&i, *pc, sizeof(Immediate));
-        *pc = (Opcode*)((uintptr_t)*pc + sizeof(Immediate));
+        *pc = (uint8_t*)((uintptr_t)*pc + sizeof(Immediate));
         return i;
     }
 
@@ -219,10 +219,11 @@ class BC {
     // Accessors to load immediate constant from the pool
     SEXP immediateConst() const;
 
-    inline static Opcode* jmpTarget(Opcode* pos) {
+    inline static uint8_t* jmpTarget(uint8_t* pos) {
         BC bc = decodeShallow(pos);
+        SLOWASSERT(isValid(bc.bc));
         assert(bc.isJmp());
-        return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
+        return (uint8_t*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
     bool isCall() const {
@@ -273,8 +274,9 @@ class BC {
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
     // This is important, as it is very performance critical.
-    RIR_INLINE static unsigned size(rir::Opcode* pc) {
-        auto bc = *pc;
+    RIR_INLINE static unsigned size(uint8_t* pc) {
+        auto bc = *(Opcode*)pc;
+        SLOWASSERT(isValid(bc));
         switch (bc) {
         // First handle the varlength BCs. In all three cases the number of
         // call arguments is the 2nd immediate argument and the
@@ -283,37 +285,37 @@ class BC {
         // immediates in the last case.
         case Opcode::call_implicit_:
         case Opcode::named_call_: {
-            pc++;
+            pc += sizeof(Opcode);
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + nargs) * sizeof(Immediate);
+            return sizeof(Opcode) + (3 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
-            pc++;
+            pc += sizeof(Opcode);
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+            return sizeof(Opcode) + (3 + 2 * nargs) * sizeof(Immediate);
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
-            pc++;
+            pc += sizeof(Opcode);
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (1 + nargs) * sizeof(Immediate);
+            return sizeof(Opcode) + (1 + nargs) * sizeof(Immediate);
         }
         default: {}
         }
         return fixedSize(bc);
     }
 
-    RIR_INLINE static Opcode* next(rir::Opcode* pc) { return pc + size(pc); }
+    RIR_INLINE static uint8_t* next(uint8_t* pc) { return pc + size(pc); }
 
     // If the decoded BC is not needed, you should use next, since it is much
     // faster.
-    inline static BC advance(Opcode** pc, Code* code)
+    inline static BC advance(uint8_t** pc, Code* code)
         __attribute__((warn_unused_result)) {
         BC cur = decode(*pc, code);
-        *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
+        *pc = (uint8_t*)((uintptr_t)(*pc) + cur.size());
         return cur;
     }
 
@@ -374,14 +376,14 @@ BC_NOARGS(V, _)
 
     inline static BC mkEnv(const std::vector<SEXP>& names, bool stub);
 
-    inline static BC decode(Opcode* pc, const Code* code) {
+    inline static BC decode(uint8_t* pc, const Code* code) {
         BC cur;
         cur.decodeFixlen(pc);
         cur.decodeExtraInformation(pc, code);
         return cur;
     }
 
-    inline static BC decodeShallow(Opcode* pc) {
+    inline static BC decodeShallow(uint8_t* pc) {
         BC cur;
         cur.decodeFixlen(pc);
         return cur;
@@ -466,9 +468,9 @@ BC_NOARGS(V, _)
         }
     }
 
-    void decodeExtraInformation(Opcode* pc, const Code* code) {
+    void decodeExtraInformation(uint8_t* pc, const Code* code) {
         allocExtraInformation();
-        pc++; // skip bc
+        pc += sizeof(Opcode); // skip bc
 
         switch (bc) {
         case Opcode::call_implicit_:
@@ -511,9 +513,9 @@ BC_NOARGS(V, _)
         }
     }
 
-    inline void decodeFixlen(Opcode* pc) {
-        bc = *pc;
-        pc++;
+    inline void decodeFixlen(uint8_t* pc) {
+        bc = *(Opcode*)pc;
+        pc += sizeof(Opcode);
         immediate = decodeImmediateArguments(bc, pc);
     }
 
@@ -528,13 +530,14 @@ BC_NOARGS(V, _)
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case Opcode::name:                                                         \
-        return imm * sizeof(Immediate) + 1;
+        return imm * sizeof(Immediate) + sizeof(Opcode);
 #include "insns.h"
         default:
             return 0;
         }
     }
 
+  public:
     static char const* name(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
@@ -546,6 +549,7 @@ BC_NOARGS(V, _)
         }
     }
 
+  private:
     static unsigned pushCount(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
@@ -583,8 +587,19 @@ BC_NOARGS(V, _)
         }
     }
 
+    static unsigned isValid(Opcode bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+    case Opcode::name:                                                         \
+        return true;
+#include "insns.h"
+        default:
+            return false;
+        }
+    }
+
     inline static ImmediateArguments decodeImmediateArguments(Opcode bc,
-                                                              Opcode* pc) {
+                                                              uint8_t* pc) {
         ImmediateArguments immediate;
         switch (bc) {
         case Opcode::deopt_:

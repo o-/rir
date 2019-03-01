@@ -7,11 +7,10 @@ namespace rir {
 #pragma pack(push)
 #pragma pack(1)
 
-enum class Opcode : uint8_t;
 struct Code;
 
 struct FrameInfo {
-    Opcode* pc;
+    uint8_t* pc;
     Code* code;
     size_t stackSize;
 };

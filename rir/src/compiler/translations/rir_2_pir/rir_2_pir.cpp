@@ -10,6 +10,7 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "simple_instruction_list.h"
@@ -33,11 +34,11 @@ template <size_t SIZE>
 struct Matcher {
     const std::array<Opcode, SIZE> seq;
 
-    typedef std::function<void(Opcode*)> MatcherMaybe;
+    typedef std::function<void(uint8_t*)> MatcherMaybe;
 
-    bool operator()(Opcode* pc, const Opcode* end, MatcherMaybe m) const {
+    bool operator()(uint8_t* pc, const uint8_t* end, MatcherMaybe m) const {
         for (size_t i = 0; i < SIZE; ++i) {
-            if (*pc != seq[i])
+            if (*(Opcode*)pc != seq[i])
                 return false;
             pc = BC::next(pc);
             if (pc == end)
@@ -51,12 +52,12 @@ struct Matcher {
 struct State {
     bool seen = false;
     BB* entryBB = nullptr;
-    Opcode* entryPC = 0;
+    uint8_t* entryPC = 0;
 
     State() {}
     State(State&&) = default;
     State(const State&) = delete;
-    State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
+    State(const State& other, bool seen, BB* entryBB, uint8_t* entryPC)
         : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack){};
 
     void operator=(const State&) = delete;
@@ -99,8 +100,8 @@ void State::mergeIn(const State& incom, BB* incomBB) {
     incomBB->setNext(entryBB);
 }
 
-std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
-    std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
+std::unordered_set<uint8_t*> findMergepoints(rir::Code* srcCode) {
+    std::unordered_map<uint8_t*, std::vector<uint8_t*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decodeShallow(pc);
@@ -113,14 +114,14 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decodeShallow(pc);
         if (!bc.isUncondJmp() && !bc.isExit()) {
-            Opcode* next = BC::next(pc);
+            auto next = BC::next(pc);
             if (incom.count(next))
                 incom[next].push_back(pc);
         }
         pc = BC::next(pc);
     }
 
-    std::unordered_set<Opcode*> mergepoints;
+    std::unordered_set<uint8_t*> mergepoints;
     // Create mergepoints
     for (auto m : incom)
         if (std::get<1>(m).size() > 1)
@@ -133,7 +134,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
+Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, uint8_t* pos,
                                    const RirStack& stack,
                                    Builder& insert) const {
     // Checkpoints in promises are badly supported (cannot inline promises
@@ -171,7 +172,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
     return theArg;
 }
 
-bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
+bool Rir2Pir::compileBC(const BC& bc, uint8_t* pos, uint8_t* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) const {
     Value* env = insert.env;
@@ -829,11 +830,22 @@ Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) const {
 
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     assert(!finalized);
+    struct Encoder {
+        rir::Code* code;
+        Encoder(rir::Code* code) : code(code) {
+            decodeInstructions(code);
+        }
+        ~Encoder() {
+            encodeInstructions(code);
+        }
+    };
+    Encoder enc(srcCode);
+
 
     CallTargetFeedback callTargetFeedback;
     std::vector<ReturnSite> results;
 
-    std::unordered_map<Opcode*, State> mergepoints;
+    std::unordered_map<uint8_t*, State> mergepoints;
     for (auto p : findMergepoints(srcCode))
         mergepoints.emplace(p, State());
 
@@ -841,8 +853,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     State cur;
     cur.seen = true;
 
-    Opcode* end = srcCode->endCode();
-    Opcode* finger = srcCode->code();
+    uint8_t* end = srcCode->endCode();
+    uint8_t* finger = srcCode->code();
 
     auto popWorklist = [&]() {
         assert(!worklist.empty());
@@ -851,7 +863,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         insert.enterBB(cur.entryBB);
         return cur.entryPC;
     };
-    auto pushWorklist = [&](BB* bb, Opcode* pos) {
+    auto pushWorklist = [&](BB* bb, uint8_t* pos) {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
@@ -905,7 +917,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
             }
 
-            auto edgeSplit = [&](Opcode* trg, BB* branch) {
+            auto edgeSplit = [&](uint8_t* trg, BB* branch) {
                 if (mergepoints.count(trg)) {
                     BB* next = insert.createBB();
                     branch->setNext(next);
@@ -972,8 +984,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         bool skip = false;
 
-        ifFunctionLiteral(pos, end, [&](Opcode* next) {
-            Opcode* pc = pos;
+        ifFunctionLiteral(pos, end, [&](uint8_t* next) {
+            uint8_t* pc = pos;
             BC ldfmls = BC::advance(&pc, srcCode);
             BC ldcode = BC::advance(&pc, srcCode);
             BC ldsrc = BC::advance(&pc, srcCode);

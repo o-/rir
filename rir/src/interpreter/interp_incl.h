@@ -49,11 +49,15 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
                                          InterpreterInstance* ctx);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx,
+                       const uint8_t* pc, InterpreterInstance* ctx,
                        R_bcstack_t* localsBase, SEXP stub);
 
 SEXP materialize(void* rirDataWrapper);
 SEXP* keepAliveSEXPs(void* rirDataWrapper);
+
+void decodeInstructions(Code*);
+void encodeInstructions(Code*);
+
 } // namespace rir
 
 #endif

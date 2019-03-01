@@ -49,7 +49,6 @@
  */
 
 namespace rir {
-enum class Opcode : uint8_t;
 struct DispatchTable;
 struct Code;
 
@@ -1061,11 +1060,11 @@ struct RirStack {
 class VLIE(FrameState, Effect::None, EnvAccess::Read) {
   public:
     bool inlined = false;
-    Opcode* pc;
+    uint8_t* pc;
     rir::Code* code;
     size_t stackSize;
 
-    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
+    FrameState(Value* env, rir::Code* code, uint8_t* pc, const RirStack& stack)
         : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
           code(code), stackSize(stack.size()) {
         for (auto& v : stack)

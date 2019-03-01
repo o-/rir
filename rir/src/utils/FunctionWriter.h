@@ -57,14 +57,14 @@ class FunctionWriter {
         function_ = fun;
     }
 
-    Code* writeCode(SEXP ast, void* bc, unsigned originalCodeSize,
+    Code* writeCode(SEXP ast, uint8_t* bc, unsigned originalCodeSize,
                     const std::map<PcOffset, BC::PoolIdx>& sources,
                     const std::map<PcOffset, BC::Label>& patchpoints,
                     const std::map<PcOffset, std::vector<BC::Label>>& labels,
-                    size_t localsCnt, size_t nops) {
+                    size_t localsCnt, size_t erased) {
         assert(function_ == nullptr &&
                "Trying to add more code after finalizing");
-        unsigned codeSize = originalCodeSize - nops;
+        unsigned codeSize = originalCodeSize - erased;
         unsigned totalSize = Code::size(codeSize, sources.size());
 
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
@@ -80,12 +80,12 @@ class FunctionWriter {
         std::vector<PcOffset> updatedLabel2Pos;
         std::unordered_map<PcOffset, BC::Label> updatedPatchpoints;
         {
-            Opcode* from = (Opcode*)bc;
-            Opcode* to = code->code();
-            const Opcode* from_start = (Opcode*)bc;
-            const Opcode* to_start = code->code();
-            const Opcode* from_end = from + originalCodeSize;
-            const Opcode* to_end = to + codeSize;
+            uint8_t* from = bc;
+            uint8_t* to = code->code();
+            const uint8_t* from_start = bc;
+            const uint8_t* to_start = code->code();
+            const uint8_t* from_end = from + originalCodeSize;
+            const uint8_t* to_end = to + codeSize;
 
             // Since those are ordered maps, the elements appear in order. Our
             // strategy is thus, to wait for the next element to show up in the
@@ -97,6 +97,13 @@ class FunctionWriter {
 
             while (from != from_end) {
                 assert(to < to_start + codeSize);
+
+                // We skip erased instructions
+                while (*from == 0) {
+                    erased--;
+                    from++;
+                    continue;
+                }
 
                 unsigned bcSize = BC::size(from);
                 PcOffset fromOffset = from - from_start;
@@ -117,13 +124,6 @@ class FunctionWriter {
                         }
                         label++;
                     }
-                }
-
-                // We skip nops (and maybe potentially other instructions)
-                if (*from == Opcode::nop_) {
-                    nops--;
-                    from++;
-                    continue;
                 }
 
                 // Copy the bytecode from 'from' to 'to'
@@ -165,12 +165,12 @@ class FunctionWriter {
             // Make sure that there is no dangling garbage at the end, if we
             // skipped more instructions than anticipated
             while (to != to_end) {
-                *to++ = Opcode::nop_;
+                *to++ = 0;
             }
 
             assert(to == to_end);
         }
-        assert(nops == 0 && "Client reported wrong number of nops");
+        assert(erased == 0 && "Client reported wrong number of erased bytes");
         assert(patchpoints.size() == updatedPatchpoints.size());
 
         // Patch jumps with actual offset in bytes

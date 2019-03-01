@@ -23,7 +23,7 @@ struct LazyEnvironment
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
 
-    LazyEnvironment(std::vector<SEXP>* arguments, SEXP parent, Opcode* opcode,
+    LazyEnvironment(std::vector<SEXP>* arguments, SEXP parent, uint8_t* opcode,
                     InterpreterInstance* cmpCtx, R_bcstack_t* localsBase)
         : RirDataWrapper(arguments->size()), arguments_(arguments),
           parent_(parent), names_(opcode), cmpCtx_(cmpCtx),
@@ -32,7 +32,7 @@ struct LazyEnvironment
 
     std::vector<SEXP>* arguments() { return arguments_; }
     const SEXP parent() { return parent_; }
-    const Opcode* names() { return names_; }
+    const uint8_t* names() { return names_; }
     InterpreterInstance* cmpCtx() { return cmpCtx_; }
     R_bcstack_t* localsBase() { return localsBase_; }
 
@@ -46,7 +46,7 @@ struct LazyEnvironment
   private:
     std::vector<SEXP>* arguments_;
     const SEXP parent_;
-    const Opcode* names_;
+    const uint8_t* names_;
     InterpreterInstance* cmpCtx_;
     R_bcstack_t* localsBase_;
 };

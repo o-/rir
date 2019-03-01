@@ -57,14 +57,14 @@ void Builder::add(Instruction* i) {
     bb->append(i);
 }
 
-FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
+FrameState* Builder::registerFrameState(rir::Code* srcCode, uint8_t* pos,
                                         const RirStack& stack) {
     auto sp = new FrameState(env, srcCode, pos, stack);
     add(sp);
     return sp;
 };
 
-Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
+Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, uint8_t* pos,
                                     const RirStack& stack) {
     auto cp = new Checkpoint();
     add(cp);

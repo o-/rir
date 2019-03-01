@@ -21,12 +21,12 @@ class State {
     static_assert(sizeof(SEXP) == 8, "Invalid ptr size");
     static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
 
-    Opcode* pc;
+    uint8_t* pc;
     int ostack;
 
-    State(Opcode* pc = nullptr, int ostack = 0) : pc(pc), ostack(ostack) {}
+    State(uint8_t* pc = nullptr, int ostack = 0) : pc(pc), ostack(ostack) {}
 
-    State(State const& from, Opcode* pc) : pc(pc), ostack(from.ostack) {}
+    State(State const& from, uint8_t* pc) : pc(pc), ostack(from.ostack) {}
 
     bool operator!=(State const& other) const {
         assert(pc == other.pc and
@@ -196,10 +196,10 @@ SIMPLE_INSTRUCTIONS(V, _)
 
 void CodeVerifier::calculateAndVerifyStack(Code* code) {
     State max; // max state
-    std::map<Opcode*, State> state;
+    std::map<uint8_t*, State> state;
     std::stack<State> q;
 
-    Opcode* cptr = code->code();
+    uint8_t* cptr = code->code();
     q.push(State(cptr));
 
     while (not q.empty()) {
@@ -214,7 +214,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
         }
         while (true) {
             state[i.pc] = i;
-            Opcode* pc = i.pc;
+            uint8_t* pc = i.pc;
             assert(pc >= code->code() && pc < code->endCode());
             BC cur = BC::decode(pc, code);
             i.advance(code);
@@ -262,13 +262,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         calculateAndVerifyStack(c);
         assert(oldo == c->stackLength and "Invalid stack layout reported");
 
-        assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
+        assert((uintptr_t)(c + 1) + pad8(c->codeSize) +
                    c->srcLength * sizeof(Code::SrclistEntry) &&
                "Invalid code length reported");
 
-        Opcode* cptr = c->code();
-        Opcode* start = cptr;
-        Opcode* end = start + c->codeSize;
+        uint8_t* cptr = c->code();
+        uint8_t* start = cptr;
+        uint8_t* end = start + c->codeSize;
         while (true) {
             assert(cptr < end);
             BC cur = BC::decode(cptr, c);
@@ -282,31 +282,33 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             case Sources::May: {
             }
             }
-            if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
-                *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
-                int off = *reinterpret_cast<int*>(cptr + 1);
+            Opcode op = *(Opcode*)cptr;
+            uint8_t* args = cptr + sizeof(Opcode);
+            if (op == Opcode::br_ || op == Opcode::brobj_ ||
+                op == Opcode::brtrue_ || op == Opcode::brfalse_) {
+                int off = *reinterpret_cast<int*>(args);
                 assert(cptr + cur.size() + off >= start &&
                        cptr + cur.size() + off < end);
             }
-            if (*cptr == Opcode::ldvar_) {
-                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::ldvar_) {
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(args);
                 assert(*argsIndex < cp_pool_length(ctx) and
                        "Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            if (*cptr == Opcode::promise_) {
-                unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::promise_) {
+                unsigned* promidx = reinterpret_cast<Immediate*>(args);
                 objs.push_back(c->getPromise(*promidx));
             }
-            if (*cptr == Opcode::ldarg_) {
-                unsigned idx = *reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::ldarg_) {
+                unsigned idx = *reinterpret_cast<Immediate*>(args);
                 assert(idx < MAX_ARG_IDX);
             }
-            if (*cptr == Opcode::call_implicit_ ||
-                *cptr == Opcode::named_call_implicit_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::call_implicit_ ||
+                op == Opcode::named_call_implicit_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(args);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.callExtra().immediateCallArguments[i];
@@ -314,7 +316,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                         continue;
                     objs.push_back(c->getPromise(offset));
                 }
-                if (*cptr == Opcode::named_call_implicit_) {
+                if (op == Opcode::named_call_implicit_) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
                         uint32_t offset = cur.callExtra().callArgumentNames[i];
                         if (offset) {
@@ -325,8 +327,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     }
                 }
             }
-            if (*cptr == Opcode::named_call_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::named_call_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(args);
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.callExtra().callArgumentNames[i];
                     if (offset) {
@@ -335,8 +337,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     }
                 }
             }
-            if (*cptr == Opcode::mk_env_ || *cptr == Opcode::mk_stub_env_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
+            if (op == Opcode::mk_env_ || op == Opcode::mk_stub_env_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(args);
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.mkEnvExtra().names[i];
                     SEXP name = cp_pool_at(ctx, offset);

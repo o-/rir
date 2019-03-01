@@ -40,9 +40,9 @@ struct FunctionSignature;
 #pragma pack(push)
 #pragma pack(1)
 
-static unsigned pad4(unsigned sizeInBytes) {
-    unsigned x = sizeInBytes % 4;
-    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+static unsigned pad8(unsigned sizeInBytes) {
+    unsigned x = sizeInBytes % 8;
+    return (x != 0) ? (sizeInBytes + 8 - x) : sizeInBytes;
 }
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
@@ -69,6 +69,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
     }
+    bool threaded;
+
     // number of invocations. only incremented if this code object is the body
     // of a function
     unsigned funInvocationCount;
@@ -92,7 +94,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
      *
      *   Content       Format            Bytesize
      *   ---------------------------------------------------------------------
-     *   code stream   BC                pad4(codeSize)
+     *   code stream   BC                pad8(codeSize)
      *
      *   srcList       cp_idx (ast)      srcLength * sizeof(SrclistEntry)
      *
@@ -105,8 +107,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     };
 
     /** Returns a pointer to the instructions in c.  */
-    Opcode* code() const { return (Opcode*)data; }
-    Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }
+    uint8_t* code() const { return (uint8_t*)data; }
+    uint8_t* endCode() const {
+        return (uint8_t*)((uintptr_t)code() + codeSize);
+    }
 
     // Usually SEXP pointers are loaded through the const pool. But sometimes
     // we want to be able to attach things to the code objects which:
@@ -124,22 +128,24 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     size_t size() const {
-        return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);
+        return sizeof(Code) + pad8(codeSize) + srcLength * sizeof(SrclistEntry);
     }
 
     static size_t size(unsigned codeSize, unsigned sources) {
-        return sizeof(Code) + pad4(codeSize) + sources * sizeof(SrclistEntry);
+        return sizeof(Code) + pad8(codeSize) + sources * sizeof(SrclistEntry);
     }
 
-    unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
+    unsigned getSrcIdxAt(const uint8_t* pc, bool allowMissing) const;
 
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
 
+    Code* decodedCopy() const;
+
   private:
     SrclistEntry* srclist() const {
-        return (SrclistEntry*)(data + pad4(codeSize));
+        return (SrclistEntry*)(data + pad8(codeSize));
     }
 };
 

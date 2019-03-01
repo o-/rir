@@ -17,13 +17,13 @@ class CodeStream {
 
     friend class Compiler;
 
-    std::vector<char>* code;
+    std::vector<uint8_t>* code;
     std::vector<Code*> promises;
 
     typedef unsigned PcOffset;
     PcOffset pos = 0;
     unsigned size = 1024;
-    unsigned nops = 0;
+    unsigned erased = 0;
 
     FunctionWriter& function;
     Preserve preserve;
@@ -72,7 +72,7 @@ class CodeStream {
 
     CodeStream(FunctionWriter& function, SEXP ast)
         : function(function), ast(ast) {
-        code = new std::vector<char>(1024);
+        code = new std::vector<uint8_t>(1024);
     }
 
     uint32_t alignedSize(uint32_t needed) {
@@ -82,8 +82,6 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        if (b.bc == Opcode::nop_)
-            nops++;
         b.write(*this);
         return *this;
     }
@@ -134,13 +132,13 @@ class CodeStream {
 
     void remove(unsigned pc) {
 
-#define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
+#define INS(pc_) (reinterpret_cast<uint8_t*>(&(*code)[(pc_)]))
 
         unsigned bcSize = BC::decodeShallow(INS(pc)).size();
 
         for (unsigned i = 0; i < bcSize; ++i) {
-            *INS(pc + i) = Opcode::nop_;
-            nops++;
+            *INS(pc + i) = 0;
+            erased++;
             // patchpoints are fixed by just removing the binding to label
             patchpoints.erase(pc + i);
         }
@@ -150,7 +148,7 @@ class CodeStream {
 
     Code* finalize(size_t localsCnt) {
         Code* res = function.writeCode(ast, &(*code)[0], pos, sources,
-                                       patchpoints, labels, localsCnt, nops);
+                                       patchpoints, labels, localsCnt, erased);
         assert(res->extraPoolSize == 0 &&
                "promise indices and src pool idx need to be aligned");
         for (auto c : promises)
