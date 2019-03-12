@@ -105,10 +105,13 @@ enum class Effect : uint8_t {
     Force,
     // Instruction might use reflection
     Reflection,
+    // Instruction might leak some of it's arguments
     LeakArg,
+    // Instruction might execute more code
+    ExecuteCode,
 
     FIRST = Order,
-    LAST = LeakArg,
+    LAST = ExecuteCode,
 };
 typedef EnumSet<Effect> Effects;
 

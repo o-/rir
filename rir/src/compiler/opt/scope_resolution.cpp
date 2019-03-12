@@ -46,16 +46,6 @@ class TheScopeResolution {
                     i->effects.reset(Effect::Reflection);
                 }
 
-                // Dead store to non-escaping environment can be removed
-                if (auto st = StVar::Cast(i)) {
-                    if (finalState.envNotEscaped(st->env()) &&
-                        finalState.deadStore(st)) {
-                        next = bb->remove(ip);
-                    }
-                    ip = next;
-                    continue;
-                }
-
                 // StVarSuper where the parent environment is known and
                 // local, can be replaced by simple StVar, if the variable
                 // exists in the super env.
