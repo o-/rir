@@ -1089,7 +1089,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effects::None(), EnvAccess::Read) {
+class VLIE(FrameState, Effects::None(), EnvAccess::Leak) {
   public:
     bool inlined = false;
     Opcode* pc;

@@ -29,8 +29,12 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                if (!i->hasEffect() && !i->changesEnv() && i->unused() &&
-                    !i->branchOrExit()) {
+                if (FrameState::Cast(i) && i->unused()) {
+                    // TODO: fix specialcase
+                    removed = true;
+                    next = bb->remove(ip);
+                } else if (!i->hasEffect() && !i->changesEnv() && i->unused() &&
+                           !i->branchOrExit()) {
                     removed = true;
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {

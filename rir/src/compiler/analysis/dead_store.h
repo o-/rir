@@ -77,10 +77,10 @@ class DeadStoreAnalysis {
             std::unordered_set<Value*> res;
             assert(env);
             for (;;) {
+                if (!MkEnv::Cast(env))
+                    break;
                 res.insert(env);
                 env = Env::parentEnv(env);
-                if (env == Env::nil())
-                    break;
             }
             return res;
         }
@@ -128,7 +128,7 @@ class DeadStoreAnalysis {
     bool isDead(StVar* st) const {
         if (!isLocal(st->env()))
             return false;
-        return observed.isObserved(st, st->env());
+        return !observed.isObserved(st, st->env());
     };
 };
 }
