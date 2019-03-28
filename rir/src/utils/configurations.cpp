@@ -113,6 +113,9 @@ void Configurations::defaultOptimizations() {
     // all of them here already.
     optimizations.push_back(new pir::CleanupCheckpoints());
 
+    optimizations.push_back(new pir::Cleanup());
+    optimizations.push_back(new pir::Cleanup());
+
     phasemarker("Phase 4: finished");
 }
 

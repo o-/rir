@@ -58,6 +58,7 @@ class LivenessIntervals {
     bool live(Instruction* where, Value* what) const;
     bool interfere(Value* v1, Value* v2) const;
     size_t count(Value* v) const { return intervals.count(v); }
+    size_t maxLive = 0;
 };
 
 } // namespace pir

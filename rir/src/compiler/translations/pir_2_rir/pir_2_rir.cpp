@@ -7,6 +7,7 @@
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/parameter.h"
+#include "compiler/native/lower.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -669,6 +670,10 @@ class Pir2Rir {
     };
 };
 
+static bool PIR_NATIVE_BACKEND =
+    getenv("PIR_NATIVE_BACKEND") &&
+    0 == strncmp("1", getenv("PIR_NATIVE_BACKEND"), 1);
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
@@ -754,6 +759,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     needsEnsureNamed.insert(u.first);
             }
     }
+
+    std::unordered_map<Promise*, unsigned> promMap;
 
     CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
@@ -1009,6 +1016,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkArg: {
                 auto p = MkArg::Cast(instr)->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                promMap[p] = id;
                 cb.add(BC::promise(id));
                 break;
             }
@@ -1119,8 +1127,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Pow, pow);
                 SIMPLE_WITH_SRCIDX(Lt, lt);
                 SIMPLE_WITH_SRCIDX(Gt, gt);
-                SIMPLE_WITH_SRCIDX(Lte, ge);
-                SIMPLE_WITH_SRCIDX(Gte, le);
+                SIMPLE_WITH_SRCIDX(Lte, le);
+                SIMPLE_WITH_SRCIDX(Gte, ge);
                 SIMPLE_WITH_SRCIDX(Eq, eq);
                 SIMPLE_WITH_SRCIDX(Neq, ne);
                 SIMPLE_WITH_SRCIDX(Colon, colon);
@@ -1341,6 +1349,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt);
+    if (PIR_NATIVE_BACKEND) {
+        {
+            Lower native;
+            if (auto n = native.tryCompile(code, promMap)) {
+                res->nativeCode = n;
+            }
+        }
+    }
     return res;
 }
 
