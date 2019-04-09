@@ -730,6 +730,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
         }
     }
+    Assumptions derived =
+        addDynamicAssumptionsForOneTarget(call, fun->signature());
+    call.givenAssumptions = derived;
 
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
