@@ -499,7 +499,7 @@ Representation PirCodeFunction::representationOf(Value* v) {
     return Representation::Sexp;
 }
 
-static void dummy() {}
+void dummy() {}
 
 PirCodeFunction::PirCodeFunction(
     jit_context& context, Code* code,
@@ -724,13 +724,14 @@ void PirCodeFunction::build() {
             if (!success)
                 return;
 
-            std::stringstream str;
-            i->print(str, false);
-            instrs.push_back(str.str());
-            insn_call_native(instrs.back().c_str(), (void*)&dummy,
-                             jit_type_create_signature(jit_abi_cdecl,
-                                                       jit_type_void, {}, 0, 0),
-                             {}, 0, 0);
+            // std::stringstream str;
+            // i->print(str, false);
+            // instrs.push_back(str.str());
+            // insn_call_native(instrs.back().c_str(), (void*)&dummy,
+            //                  jit_type_create_signature(jit_abi_cdecl,
+            //                                            jit_type_void, {}, 0,
+            //                                            0),
+            //                  {}, 0, 0);
 
             switch (i->tag) {
             case Tag::PirCopy: {
@@ -838,7 +839,11 @@ void PirCodeFunction::build() {
                 break;
 
             case Tag::ScheduledDeopt: {
-                call(NativeBuiltins::error, {});
+                std::vector<Value*> args;
+                i->eachArg([&](Value* v) { args.push_back(v); });
+                withCallFrame(i, args, [&]() -> jit_value {
+                    return call(NativeBuiltins::error, {});
+                });
                 break;
             }
 

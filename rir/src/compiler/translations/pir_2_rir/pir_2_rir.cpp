@@ -671,7 +671,7 @@ class Pir2Rir {
 };
 
 static bool PIR_NATIVE_BACKEND =
-    getenv("PIR_NATIVE_BACKEND") &&
+    !getenv("PIR_NATIVE_BACKEND") ||
     0 == strncmp("1", getenv("PIR_NATIVE_BACKEND"), 1);
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
