@@ -74,13 +74,25 @@ NativeBuiltin NativeBuiltins::createEnvironment = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
+SEXP ldvarImpl(SEXP a, SEXP b) {
+    auto res = Rf_findVar(a, b);
+    // std::cout << CHAR(PRINTNAME(a)) << "=";
+    // Rf_PrintValue(res);
+    return res;
+};
+
 NativeBuiltin NativeBuiltins::ldvar = {
-    "Rf_findVar", (void*)&Rf_findVar, 2,
+    "ldvar", (void*)&ldvarImpl, 2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
+void stvarImpl(SEXP a, SEXP b, SEXP c) {
+    // std::cout << CHAR(PRINTNAME(a)) << "=";
+    // Rf_PrintValue(b);
+    Rf_defineVar(a, b, c);
+};
 NativeBuiltin NativeBuiltins::stvar = {
-    "Rf_defineVar", (void*)&Rf_defineVar, 3,
+    "stvar", (void*)&stvarImpl, 3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
@@ -96,7 +108,7 @@ NativeBuiltin NativeBuiltins::error = {
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, {}, 0, 0),
 };
 
-static bool debugPrintCallBuiltinImpl = true;
+static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs, InterpreterInstance* ctx) {
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
@@ -202,6 +214,7 @@ static SEXPREC createFakeSEXP(SEXPTYPE t) {
     res.gengc_prev_node = R_NilValue;
     res.sxpinfo.gcgen = 1;
     res.sxpinfo.mark = 1;
+    res.sxpinfo.named = 2;
     res.sxpinfo.type = t;
     return res;
 }
@@ -214,6 +227,7 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;
     SEXPREC arglist2 = createFakeCONS(R_NilValue);
@@ -222,17 +236,39 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     arglist.u.listsxp.carval = lhs;
     arglist2.u.listsxp.carval = rhs;
 
+    if (debugBinopImpl) {
+        debugBinopImpl = false;
+        std::cout << "call binop " << (int)kind << " with\n";
+        Rf_PrintValue(lhs);
+        Rf_PrintValue(rhs);
+
+        debugBinopImpl = true;
+    }
+
     switch (kind) {
     case BinopKind::ADD:
         BINOP_FALLBACK("+");
+        break;
     case BinopKind::SUB:
         BINOP_FALLBACK("-");
+        break;
     case BinopKind::MUL:
         BINOP_FALLBACK("*");
+        break;
     case BinopKind::DIV:
         BINOP_FALLBACK("/");
+        break;
     }
     SLOWASSERT(res);
+
+    if (debugBinopImpl) {
+        debugBinopImpl = false;
+        std::cout << "call binop " << (int)kind << " got\n";
+        Rf_PrintValue(res);
+
+        debugBinopImpl = true;
+    }
+
     return res;
 }
 

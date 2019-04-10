@@ -478,7 +478,7 @@ PirCodeFunction::withCallFrame(Instruction* i, const std::vector<Value*>& args,
 }
 
 static const bool debug = false;
-static const bool debug2 = true;
+static const bool debug2 = false;
 
 Representation PirCodeFunction::representationOf(Value* v) {
     if (auto i = Instruction::Cast(v)) {
@@ -498,6 +498,8 @@ Representation PirCodeFunction::representationOf(Value* v) {
         return Representation::Real;
     return Representation::Sexp;
 }
+
+static void dummy() {}
 
 PirCodeFunction::PirCodeFunction(
     jit_context& context, Code* code,
@@ -713,6 +715,7 @@ void PirCodeFunction::build() {
         setVal(i, res);
     };
 
+    std::vector<std::string> instrs;
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         insn_label(blockLabel.at(bb));
 
@@ -721,15 +724,22 @@ void PirCodeFunction::build() {
             if (!success)
                 return;
 
+            std::stringstream str;
+            i->print(str, false);
+            instrs.push_back(str.str());
+            insn_call_native(instrs.back().c_str(), (void*)&dummy,
+                             jit_type_create_signature(jit_abi_cdecl,
+                                                       jit_type_void, {}, 0, 0),
+                             {}, 0, 0);
+
             switch (i->tag) {
             case Tag::PirCopy: {
                 auto c = PirCopy::Cast(i);
                 auto in = c->arg<0>().val();
-                if (phis.count(c)) {
-                    store(phis.at(c), loadSame(i, in));
-                } else {
-                    setVal(i, insn_dup(loadSame(i, in)));
-                }
+                if (phis.count(c))
+                    store(phis.at(c),
+                          load(i, in, Representation(phis.at(c).type())));
+                setVal(i, loadSame(i, in));
                 break;
             }
 
@@ -1105,12 +1115,14 @@ void PirCodeFunction::build() {
 
     if (success && debug2) {
         std::cout << "******************* SUCCESS ************************\n";
-        jit_dump_function(stdout, raw(), "test");
+        if (debug)
+            jit_dump_function(stdout, raw(), "test");
     }
 
     if (!success && debug2) {
         std::cout << "****************** FAIL *************************\n";
-        jit_dump_function(stdout, raw(), "test");
+        if (debug)
+            jit_dump_function(stdout, raw(), "test");
     }
 };
 
