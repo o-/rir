@@ -101,7 +101,8 @@ class PirCodeFunction : public jit_function {
     size_t numLocals = liveness.maxLive;
 
     PirCodeFunction(jit_context& context, Code* code,
-                    const std::unordered_map<Promise*, unsigned>& promMap);
+                    const std::unordered_map<Promise*, unsigned>& promMap,
+                    const std::unordered_set<Instruction*>& needsEnsureNamed);
 
     void build() override;
     jit_value argument(int i);
@@ -167,6 +168,7 @@ class PirCodeFunction : public jit_function {
 
   protected:
     const std::unordered_map<Promise*, unsigned>& promMap;
+    const std::unordered_set<Instruction*>& needsEnsureNamed;
 
     std::unordered_map<Value*, jit_value> valueMap;
     std::unordered_map<Instruction*, Representation> representation;
@@ -528,9 +530,11 @@ void dummy() {}
 
 PirCodeFunction::PirCodeFunction(
     jit_context& context, Code* code,
-    const std::unordered_map<Promise*, unsigned>& promMap)
+    const std::unordered_map<Promise*, unsigned>& promMap,
+    const std::unordered_set<Instruction*>& needsEnsureNamed)
     : jit_function(context), code(code), cfg(code),
-      liveness(code->nextBBId, cfg), promMap(promMap) {
+      liveness(code->nextBBId, cfg), promMap(promMap),
+      needsEnsureNamed(needsEnsureNamed) {
     create();
 
     auto cp_ = insn_load_relative(paramCtx(), cpOfs, sxp);
@@ -757,6 +761,29 @@ void PirCodeFunction::build() {
         setVal(i, res);
     };
 
+    std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
+    jit_value bindingsCacheBase;
+    {
+        SmallSet<std::pair<Value*, SEXP>> bindings;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            SEXP varName = nullptr;
+            if (auto l = LdVar::Cast(i))
+                varName = l->varName;
+            else if (auto l = StVar::Cast(i))
+                varName = l->varName;
+
+            if (varName && MkEnv::Cast(i->env())) {
+                bindings.insert(std::pair<Value*, SEXP>(i->env(), varName));
+            }
+        });
+        size_t idx = 0;
+        for (auto& b : bindings) {
+            bindingsCache[b.first][b.second] = idx * sizeof(SEXPREC);
+            idx++;
+        }
+        auto size = new_constant(idx * sizeof(SEXPREC));
+        bindingsCacheBase = insn_alloca(size);
+    }
     std::vector<std::string> instrs;
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         insn_label(blockLabel.at(bb));
@@ -973,9 +1000,33 @@ void PirCodeFunction::build() {
 
             case Tag::LdVar: {
                 auto ld = LdVar::Cast(i);
-                auto res =
-                    call(NativeBuiltins::ldvar,
-                         {constant(ld->varName, sxp), loadSxp(i, ld->env())});
+                jit_value res;
+                if (bindingsCache.count(i->env())) {
+                    res = jit_value_create(raw(), sxp);
+                    auto offset = bindingsCache.at(i->env()).at(ld->varName);
+
+                    auto cache = insn_load_relative(bindingsCacheBase, offset,
+                                                    jit_type_nuint);
+                    jit_label done, miss;
+                    insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
+                    auto val = insn_load_relative(cache, carOfs, sxp);
+                    insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
+                                   miss);
+                    store(res, val);
+                    insn_branch(done);
+
+                    insn_label(miss);
+                    auto pos =
+                        insn_add(bindingsCacheBase, new_constant(offset));
+                    store(res, call(NativeBuiltins::ldvarCacheMiss,
+                                    {constant(ld->varName, sxp),
+                                     loadSxp(i, ld->env()), pos}));
+                    insn_label(done);
+                } else {
+                    res = call(
+                        NativeBuiltins::ldvar,
+                        {constant(ld->varName, sxp), loadSxp(i, ld->env())});
+                }
                 checkMissing(res);
                 checkUnbound(res);
                 setVal(i, res);
@@ -1059,9 +1110,37 @@ void PirCodeFunction::build() {
 
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
-                call(NativeBuiltins::stvar,
-                     {constant(st->varName, sxp),
-                      loadSxp(i, st->arg<0>().val()), loadSxp(i, st->env())});
+                if (bindingsCache.count(i->env())) {
+
+                    auto offset = bindingsCache.at(i->env()).at(st->varName);
+                    auto cache = insn_load_relative(bindingsCacheBase, offset,
+                                                    jit_type_nuint);
+                    jit_label done, miss;
+
+                    insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
+                    auto val = insn_load_relative(cache, carOfs, sxp);
+                    insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
+                                   miss);
+
+                    // TODO: write barrier
+                    insn_store_relative(cache, carOfs,
+                                        loadSxp(i, st->arg<0>().val()));
+                    insn_branch(done);
+
+                    insn_label(miss);
+
+                    call(NativeBuiltins::stvar,
+                         {constant(st->varName, sxp),
+                          loadSxp(i, st->arg<0>().val()),
+                          loadSxp(i, st->env())});
+
+                    insn_label(done);
+                } else {
+                    call(NativeBuiltins::stvar,
+                         {constant(st->varName, sxp),
+                          loadSxp(i, st->arg<0>().val()),
+                          loadSxp(i, st->env())});
+                }
                 break;
             }
 
@@ -1112,6 +1191,12 @@ void PirCodeFunction::build() {
                 setVal(i,
                        call(NativeBuiltins::createEnvironment,
                             {parent, arglist, new_constant(mkenv->context)}));
+
+                // Zero bindings cache
+                if (bindingsCache.count(i))
+                    for (auto b : bindingsCache.at(i))
+                        insn_store_relative(bindingsCacheBase, b.second,
+                                            new_constant(nullptr));
                 break;
             }
 
@@ -1223,10 +1308,15 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            if (!success) {
+            if (!success && debug) {
                 std::cerr << "Can't compile ";
                 i->print(std::cerr, true);
                 std::cerr << "\n";
+            }
+
+            if (representationOf(i) == Representation::Sexp &&
+                needsEnsureNamed.count(i)) {
+                call(NativeBuiltins::ensureNamed, {loadSxp(i, i)});
             }
         }
 
@@ -1249,9 +1339,10 @@ void PirCodeFunction::build() {
 
 static jit_context context;
 
-void* Lower::tryCompile(Code* code,
-                        const std::unordered_map<Promise*, unsigned>& promMap) {
-    PirCodeFunction function(context, code, promMap);
+void* Lower::tryCompile(
+    Code* code, const std::unordered_map<Promise*, unsigned>& promMap,
+    const std::unordered_set<Instruction*>& needsEnsureNamed) {
+    PirCodeFunction function(context, code, promMap, needsEnsureNamed);
     function.set_optimization_level(function.max_optimization_level());
     function.build_start();
     function.build();

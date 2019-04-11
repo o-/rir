@@ -1352,7 +1352,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     if (PIR_NATIVE_BACKEND) {
         {
             Lower native;
-            if (auto n = native.tryCompile(code, promMap)) {
+            if (auto n = native.tryCompile(code, promMap, needsEnsureNamed)) {
                 res->nativeCode = n;
             }
         }

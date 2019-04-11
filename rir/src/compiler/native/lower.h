@@ -6,6 +6,7 @@
 
 #include "jit/jit-plus.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rir {
@@ -13,7 +14,8 @@ namespace pir {
 
 class Lower {
   public:
-    void* tryCompile(Code* code, const std::unordered_map<Promise*, unsigned>&);
+    void* tryCompile(Code* code, const std::unordered_map<Promise*, unsigned>&,
+                     const std::unordered_set<Instruction*>& needsEnsureNamed);
 };
 }
 }

@@ -47,6 +47,7 @@ struct NativeBuiltins {
     static NativeBuiltin createEnvironment;
 
     static NativeBuiltin ldvar;
+    static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
     static NativeBuiltin ldfun;
 
@@ -66,6 +67,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin asTest;
     static NativeBuiltin asLogical;
+
+    static NativeBuiltin ensureNamed;
 };
 }
 }

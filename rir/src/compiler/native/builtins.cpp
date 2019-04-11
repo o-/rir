@@ -19,7 +19,9 @@ static jit_type_t int1[1] = {jit_type_int};
 static jit_type_t double1[1] = {jit_type_float64};
 
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
+static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
+static jit_type_t sxp3_void[4] = {sxp, sxp, sxp, jit_type_void_ptr};
 
 NativeBuiltin NativeBuiltins::forcePromise = {
     "forcePromise", (void*)&forcePromiseImpl, 1,
@@ -85,6 +87,25 @@ SEXP ldvarImpl(SEXP a, SEXP b) {
 NativeBuiltin NativeBuiltins::ldvar = {
     "ldvar", (void*)&ldvarImpl, 2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+};
+
+SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
+    if (*cache != (SEXP)1) {
+        R_varloc_t loc = R_findVarLocInFrame(env, sym);
+        if (R_VARLOC_IS_NULL(loc)) {
+            *cache = (SEXP)1;
+        } else {
+            *cache = loc.cell;
+            if (CAR(*cache) != R_UnboundValue)
+                return CAR(*cache);
+        }
+    }
+    return Rf_findVar(sym, env);
+};
+
+NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
+    "ldvarCacheMiss", (void*)&ldvarCachedImpl, 3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_void, 3, 0),
 };
 
 void stvarImpl(SEXP a, SEXP b, SEXP c) {
@@ -243,10 +264,6 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, BinopKind kind) {
     SEXP arglist2 = CONS_NR(rhs, R_NilValue);
     SEXP arglist = CONS_NR(lhs, arglist2);
 
-    // TODO: use static refcount for those
-    ENSURE_NAMED(lhs);
-    ENSURE_NAMED(rhs);
-
     PROTECT(arglist);
     switch (kind) {
     case BinopKind::ADD:
@@ -306,10 +323,6 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     arglist2.u.listsxp.carval = rhs;
     SEXP arglist = &arglist1;
     SEXP env = R_NilValue;
-
-    // TODO: use static refcount for those
-    ENSURE_NAMED(lhs);
-    ENSURE_NAMED(rhs);
 
     if (debugBinopImpl) {
         debugBinopImpl = false;
@@ -421,6 +434,12 @@ int asLogicalImpl(SEXP a) { return Rf_asLogical(a); }
 NativeBuiltin NativeBuiltins::asLogical = {
     "aslogical", (void*)&asLogicalImpl, 1,
     jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
+};
+
+void ensureNamedImpl(SEXP a) { ENSURE_NAMED(a); }
+NativeBuiltin NativeBuiltins::ensureNamed = {
+    "ensureNamed", (void*)&ensureNamedImpl, 1,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
 };
 }
 }
