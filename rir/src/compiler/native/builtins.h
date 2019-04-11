@@ -26,6 +26,14 @@ enum class BinopKind : int {
     MUL,
     SUB,
     DIV,
+    EQ,
+    NE,
+    LT,
+    LTE,
+    GT,
+    GTE,
+    LAND,
+    LOR,
 };
 
 struct NativeBuiltins {
@@ -50,9 +58,14 @@ struct NativeBuiltins {
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin newInt;
+    static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
 
     static NativeBuiltin binop;
+    static NativeBuiltin binopEnv;
+
+    static NativeBuiltin asTest;
+    static NativeBuiltin asLogical;
 };
 }
 }

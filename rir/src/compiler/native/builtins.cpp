@@ -19,6 +19,7 @@ static jit_type_t int1[1] = {jit_type_int};
 static jit_type_t double1[1] = {jit_type_float64};
 
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
+static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
 
 NativeBuiltin NativeBuiltins::forcePromise = {
     "forcePromise", (void*)&forcePromiseImpl, 1,
@@ -168,6 +169,12 @@ NativeBuiltin NativeBuiltins::createPromise = {
     jit_type_create_signature(jit_abi_cdecl, sxp, createPromiseArgs, 4, 0),
 };
 
+SEXP newLglImpl(int i) {
+    auto res = Rf_allocVector(LGLSXP, 1);
+    INTEGER(res)[0] = i;
+    return res;
+}
+
 SEXP newIntImpl(int i) {
     auto res = Rf_allocVector(INTSXP, 1);
     INTEGER(res)[0] = i;
@@ -188,6 +195,10 @@ NativeBuiltin NativeBuiltins::newReal = {
     "newReal", (void*)&newRealImpl, 1,
     jit_type_create_signature(jit_abi_cdecl, sxp, double1, 1, 0),
 };
+NativeBuiltin NativeBuiltins::newLgl = {
+    "newLgl", (void*)&newLglImpl, 1,
+    jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
+};
 
 #define BINOP_FALLBACK(op)                                                     \
     do {                                                                       \
@@ -202,7 +213,7 @@ NativeBuiltin NativeBuiltins::newReal = {
         SEXP call = R_NilValue;                                                \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, &arglist, R_NilValue);                           \
+        res = blt(call, prim, arglist, env);                                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
     } while (false)
@@ -227,14 +238,78 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, BinopKind kind) {
+    SEXP res = nullptr;
+    SEXP arglist2 = CONS_NR(rhs, R_NilValue);
+    SEXP arglist = CONS_NR(lhs, arglist2);
+
+    // TODO: use static refcount for those
+    ENSURE_NAMED(lhs);
+    ENSURE_NAMED(rhs);
+
+    PROTECT(arglist);
+    switch (kind) {
+    case BinopKind::ADD:
+        BINOP_FALLBACK("+");
+        break;
+    case BinopKind::SUB:
+        BINOP_FALLBACK("-");
+        break;
+    case BinopKind::MUL:
+        BINOP_FALLBACK("*");
+        break;
+    case BinopKind::DIV:
+        BINOP_FALLBACK("/");
+        break;
+    case BinopKind::EQ:
+        BINOP_FALLBACK("==");
+        break;
+    case BinopKind::NE:
+        BINOP_FALLBACK("!=");
+        break;
+    case BinopKind::GT:
+        BINOP_FALLBACK(">");
+        break;
+    case BinopKind::GTE:
+        BINOP_FALLBACK(">=");
+        break;
+    case BinopKind::LT:
+        BINOP_FALLBACK("<");
+        break;
+    case BinopKind::LTE:
+        BINOP_FALLBACK("<=");
+        break;
+    case BinopKind::LAND:
+        BINOP_FALLBACK("&&");
+        break;
+    case BinopKind::LOR:
+        BINOP_FALLBACK("||");
+        break;
+    }
+    UNPROTECT(1);
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::binopEnv = {
+    "binop", (void*)&binopEnvImpl, 4,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+};
+
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;
     SEXPREC arglist2 = createFakeCONS(R_NilValue);
-    SEXPREC arglist = createFakeCONS(&arglist2);
+    SEXPREC arglist1 = createFakeCONS(&arglist2);
 
-    arglist.u.listsxp.carval = lhs;
+    arglist1.u.listsxp.carval = lhs;
     arglist2.u.listsxp.carval = rhs;
+    SEXP arglist = &arglist1;
+    SEXP env = R_NilValue;
+
+    // TODO: use static refcount for those
+    ENSURE_NAMED(lhs);
+    ENSURE_NAMED(rhs);
 
     if (debugBinopImpl) {
         debugBinopImpl = false;
@@ -258,6 +333,30 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     case BinopKind::DIV:
         BINOP_FALLBACK("/");
         break;
+    case BinopKind::EQ:
+        BINOP_FALLBACK("==");
+        break;
+    case BinopKind::NE:
+        BINOP_FALLBACK("!=");
+        break;
+    case BinopKind::GT:
+        BINOP_FALLBACK(">");
+        break;
+    case BinopKind::GTE:
+        BINOP_FALLBACK(">=");
+        break;
+    case BinopKind::LT:
+        BINOP_FALLBACK("<");
+        break;
+    case BinopKind::LTE:
+        BINOP_FALLBACK("<=");
+        break;
+    case BinopKind::LAND:
+        BINOP_FALLBACK("&&");
+        break;
+    case BinopKind::LOR:
+        BINOP_FALLBACK("||");
+        break;
     }
     SLOWASSERT(res);
 
@@ -275,6 +374,53 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 NativeBuiltin NativeBuiltins::binop = {
     "binop", (void*)&binopImpl, 3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
+int astestImpl(SEXP val) {
+    int cond = NA_LOGICAL;
+    if (XLENGTH(val) > 1)
+        Rf_warningcall(
+            // TODO: pass srcid
+            R_NilValue, "the condition has length > 1 and only the first "
+                        "element will be used");
+
+    if (XLENGTH(val) > 0) {
+        switch (TYPEOF(val)) {
+        case LGLSXP:
+            cond = LOGICAL(val)[0];
+            break;
+        case INTSXP:
+            cond = INTEGER(val)[0]; // relies on NA_INTEGER == NA_LOGICAL
+            break;
+        default:
+            cond = Rf_asLogical(val);
+        }
+    }
+
+    if (cond == NA_LOGICAL) {
+        const char* msg =
+            XLENGTH(val) ? (isLogical(val)
+                                ? ("missing value where TRUE/FALSE needed")
+                                : ("argument is not interpretable as logical"))
+                         : ("argument is of length zero");
+        Rf_errorcall(
+            // TODO: pass srcid
+            R_NilValue, msg);
+    }
+
+    return cond;
+}
+
+NativeBuiltin NativeBuiltins::asTest = {
+    "astest", (void*)&astestImpl, 1,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
+};
+
+int asLogicalImpl(SEXP a) { return Rf_asLogical(a); }
+
+NativeBuiltin NativeBuiltins::asLogical = {
+    "aslogical", (void*)&asLogicalImpl, 1,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
 };
 }
 }

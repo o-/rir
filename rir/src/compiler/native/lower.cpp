@@ -107,6 +107,7 @@ class PirCodeFunction : public jit_function {
     jit_value argument(int i);
     jit_value constant(SEXP c, jit_type_t);
     jit_value sexptype(jit_value v);
+    jit_value isObj(jit_value v);
 
     jit_value call(const NativeBuiltin&, const std::vector<jit_value>&);
 
@@ -124,6 +125,7 @@ class PirCodeFunction : public jit_function {
     void setStackHeight(jit_value);
     jit_value stack(int i);
     void stack(int i, jit_value);
+    void stack(const std::vector<jit_value>&);
 
     jit_value getLocal(size_t i);
     void setLocal(size_t i, jit_value);
@@ -156,6 +158,10 @@ class PirCodeFunction : public jit_function {
         gcSafepoint(pos, 1, true);
         return call(NativeBuiltins::newReal, {v});
     }
+    jit_value boxLgl(Instruction* pos, jit_value v) {
+        gcSafepoint(pos, 1, true);
+        return call(NativeBuiltins::newLgl, {v});
+    }
     jit_value withCallFrame(Instruction* i, const std::vector<Value*>& args,
                             const std::function<jit_value()>&);
 
@@ -170,8 +176,8 @@ class PirCodeFunction : public jit_function {
     void setVal(Instruction* i, jit_value val) {
         assert(!valueMap.count(i));
         if (i->producesRirResult() && representation.at(i) != val.type()) {
-            i->print(std::cout);
             jit_dump_function(stdout, raw(), "test");
+            i->print(std::cout);
             std::cout << "\nWanted a " << representation.at(i) << " but got a "
                       << Representation(val.type()) << "\n";
             std::cout << "\n";
@@ -221,10 +227,7 @@ void PirCodeFunction::setStackHeight(jit_value pos) {
 void PirCodeFunction::setLocal(size_t i, jit_value v) {
     assert(i < numLocals);
     assert(v.type() == sxp);
-    auto offset = i * sizeof(R_bcstack_t);
-    // set type tag to 0
-    insn_store_relative(nodestackPtr(), offset, new_constant(0));
-    offset += stackCellValueOfs;
+    auto offset = i * sizeof(R_bcstack_t) + stackCellValueOfs;
     insn_store_relative(basepointer, offset, v);
 }
 
@@ -241,14 +244,28 @@ jit_value PirCodeFunction::stack(int i) {
     return insn_load_relative(nodestackPtr(), offset, sxp);
 }
 
+void PirCodeFunction::stack(const std::vector<jit_value>& args) {
+    auto offset = -args.size() * sizeof(R_bcstack_t);
+    auto stackptr = nodestackPtr();
+    for (auto& arg : args) {
+        // set type tag to 0
+        insn_store_relative(stackptr, offset, new_constant(0));
+        offset += stackCellValueOfs;
+        // store the value
+        insn_store_relative(stackptr, offset, arg);
+        offset += sizeof(R_bcstack_t) - stackCellValueOfs;
+    }
+}
+
 void PirCodeFunction::stack(int i, jit_value v) {
     assert(v.type() == sxp);
     auto offset = -(i + 1) * sizeof(R_bcstack_t);
+    auto stackptr = nodestackPtr();
     // set type tag to 0
-    insn_store_relative(nodestackPtr(), offset, new_constant(0));
+    insn_store_relative(stackptr, offset, new_constant(0));
     offset += stackCellValueOfs;
     // store the value
-    insn_store_relative(nodestackPtr(), offset, v);
+    insn_store_relative(stackptr, offset, v);
 }
 
 jit_value PirCodeFunction::load(Instruction* pos, Value* v,
@@ -345,6 +362,13 @@ void PirCodeFunction::gcSafepoint(Instruction* i, size_t required,
 
     insn_label(ok);
 }
+
+jit_value PirCodeFunction::isObj(jit_value v) {
+    auto sxpinfo = insn_load_relative(v, sxpinfofOfs, jit_type_ulong);
+    auto isobj =
+        insn_and(sxpinfo, new_constant((unsigned long)(1 << (TYPE_BITS + 2))));
+    return insn_convert(isobj, jit_type_int);
+};
 
 jit_value PirCodeFunction::sexptype(jit_value v) {
     auto sxpinfo = insn_load_relative(v, sxpinfofOfs, jit_type_ulong);
@@ -469,9 +493,10 @@ PirCodeFunction::withCallFrame(Instruction* i, const std::vector<Value*>& args,
     gcSafepoint(i, -1, false);
     auto nargs = args.size();
     incStack(nargs, false);
-    int pos = nargs - 1;
+    std::vector<jit_value> jitArgs;
     for (auto& arg : args)
-        stack(pos--, load(i, arg, Representation::Sexp));
+        jitArgs.push_back(load(i, arg, Representation::Sexp));
+    stack(jitArgs);
     auto res = theCall();
     decStack(nargs);
     return res;
@@ -552,6 +577,7 @@ PirCodeFunction::PirCodeFunction(
                 update(i, r);
                 break;
             }
+            case Tag::IsObject:
             case Tag::AsTest: {
                 update(i, Representation::Integer);
                 break;
@@ -628,46 +654,61 @@ void PirCodeFunction::build() {
 
     auto compileRelop = [&](
         Instruction* i, std::function<jit_value(jit_value, jit_value)> insert,
-        Representation argRep) {
-        if (representation.at(i) != Representation::Integer) {
-            success = false;
+        Representation argRep, BinopKind kind) {
+
+        auto rep = representationOf(i);
+        if (argRep == Representation::Sexp) {
+            auto a = loadSxp(i, i->arg(0).val());
+            auto b = loadSxp(i, i->arg(1).val());
+
+            jit_value res;
+            gcSafepoint(i, -1, true);
+            if (i->hasEnv()) {
+                auto e = loadSxp(i, i->env());
+                res = call(NativeBuiltins::binopEnv,
+                           {a, b, e, new_constant((int)kind)});
+            } else {
+                res = call(NativeBuiltins::binop,
+                           {a, b, new_constant((int)kind)});
+            }
+            if (rep == Representation::Integer)
+                setVal(i, unboxInt(res));
+            else
+                setVal(i, res);
             return;
         }
 
-        if (argRep == Representation::Integer ||
-            argRep == Representation::Real) {
-            auto res = jit_value_create(raw(), representation.at(i));
-            auto a = load(i, i->arg(0).val(), argRep);
-            auto b = load(i, i->arg(1).val(), argRep);
+        auto res = jit_value_create(raw(), jit_type_int);
+        auto a = load(i, i->arg(0).val(), argRep);
+        auto b = load(i, i->arg(1).val(), argRep);
 
-            jit_label done;
-            jit_label isNa;
-            if (argRep == Representation::Integer) {
-                auto aIsNa = insn_eq(a, new_constant(NA_INTEGER));
-                insn_branch_if(aIsNa, isNa);
-                auto bIsNa = insn_eq(b, new_constant(NA_INTEGER));
-                insn_branch_if(bIsNa, isNa);
-            } else {
-                auto aIsNa = insn_ne(a, a);
-                insn_branch_if(aIsNa, isNa);
-                auto bIsNa = insn_ne(b, b);
-                insn_branch_if(bIsNa, isNa);
-            }
-
-            auto r = insert(a, b);
-            store(res, r);
-            insn_branch(done);
-
-            insn_label(isNa);
-            assert(representation.at(i) == Representation::Integer);
-            store(res, new_constant(NA_INTEGER));
-
-            insn_label(done);
-
-            setVal(i, res);
+        jit_label done;
+        jit_label isNa;
+        if (argRep == Representation::Integer) {
+            auto aIsNa = insn_eq(a, new_constant(NA_INTEGER));
+            insn_branch_if(aIsNa, isNa);
+            auto bIsNa = insn_eq(b, new_constant(NA_INTEGER));
+            insn_branch_if(bIsNa, isNa);
         } else {
-            success = false;
+            auto aIsNa = insn_ne(a, a);
+            insn_branch_if(aIsNa, isNa);
+            auto bIsNa = insn_ne(b, b);
+            insn_branch_if(bIsNa, isNa);
         }
+
+        auto r = insert(a, b);
+        store(res, r);
+        insn_branch(done);
+
+        insn_label(isNa);
+        store(res, new_constant(NA_INTEGER));
+
+        insn_label(done);
+
+        if (rep == Representation::Sexp)
+            setVal(i, boxLgl(i, res));
+        else
+            setVal(i, res);
     };
 
     auto compileBinop = [&](
@@ -681,14 +722,15 @@ void PirCodeFunction::build() {
         auto b = load(i, i->arg(1).val(), argRep);
 
         if (r == Representation::Sexp) {
-            if (i->hasEnv() || i->type.maybeObj()) {
-                success = false;
-                return;
-            }
-
             gcSafepoint(i, -1, true);
-            setVal(i, call(NativeBuiltins::binop,
-                           {a, b, new_constant((int)kind)}));
+            if (i->hasEnv()) {
+                auto e = loadSxp(i, i->env());
+                setVal(i, call(NativeBuiltins::binopEnv,
+                               {a, b, e, new_constant((int)kind)}));
+            } else {
+                setVal(i, call(NativeBuiltins::binop,
+                               {a, b, new_constant((int)kind)}));
+            }
             return;
         }
 
@@ -744,27 +786,80 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            case Tag::AsTest: {
-                if (representation.at(i) != Representation::Integer ||
-                    representationOf(i->arg(0).val()) == Representation::Sexp) {
+            case Tag::AsLogical: {
+                auto arg = i->arg(0).val();
+
+                auto r1 = representationOf(arg);
+                auto r2 = representationOf(i);
+
+                assert(r2 != Representation::Real);
+
+                jit_value res;
+                if (r1 == Representation::Sexp) {
+                    res = call(NativeBuiltins::asLogical, {loadSxp(i, arg)});
+                } else if (r1 == Representation::Real) {
+                    auto res = insn_dup(load(i, arg, Representation::Integer));
+
+                    auto narg = load(i, arg, Representation::Real);
+                    jit_label noNa;
+                    auto notNa = insn_eq(narg, narg);
+                    insn_branch_if(notNa, noNa);
+
+                    store(res, new_constant(NA_INTEGER));
+
+                    insn_label(noNa);
+                } else {
+                    assert(r1 == Representation::Integer);
+                }
+
+                if (r2 == Representation::Sexp) {
+                    res = boxLgl(i, res);
+                }
+
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::IsObject: {
+                if (representation.at(i) != Representation::Integer) {
                     success = false;
                     break;
                 }
 
-                auto r = representationOf(i->arg(0).val());
+                auto arg = i->arg(0).val();
+                if (representationOf(arg) == Representation::Sexp)
+                    setVal(i, isObj(loadSxp(i, arg)));
+                else
+                    setVal(i, new_constant((int)0));
+                break;
+            }
+
+            case Tag::AsTest: {
+                assert(representation.at(i) == Representation::Integer);
+
+                auto arg = i->arg(0).val();
+                if (auto lgl = AsLogical::Cast(arg))
+                    arg = lgl->arg(0).val();
+
+                if (representationOf(arg) == Representation::Sexp) {
+                    setVal(i, call(NativeBuiltins::asTest, {loadSxp(i, arg)}));
+                    break;
+                }
+
+                auto r = representationOf(arg);
 
                 jit_label notNa;
                 if (r == Representation::Real) {
-                    auto arg = load(i, i->arg(0).val(), r);
-                    auto isNa = insn_eq(arg, arg);
-                    insn_branch_if_not(isNa, notNa);
-                    setVal(i, arg);
+                    auto narg = load(i, arg, r);
+                    auto isNotNa = insn_eq(narg, narg);
+                    narg = insn_convert(narg, jit_type_int, false);
+                    setVal(i, narg);
+                    insn_branch_if(isNotNa, notNa);
                 } else {
-                    auto arg =
-                        load(i, i->arg(0).val(), Representation::Integer);
-                    auto isNa = insn_eq(arg, new_constant(NA_INTEGER));
-                    insn_branch_if_not(isNa, notNa);
-                    setVal(i, arg);
+                    auto narg = load(i, arg, Representation::Integer);
+                    auto isNotNa = insn_ne(narg, new_constant(NA_INTEGER));
+                    setVal(i, narg);
+                    insn_branch_if(isNotNa, notNa);
                 }
 
                 call(NativeBuiltins::error, {});
@@ -776,49 +871,49 @@ void PirCodeFunction::build() {
             case Tag::Neq:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_ne(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::NE);
                 break;
 
             case Tag::Eq:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_eq(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::EQ);
                 break;
 
             case Tag::Gt:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_gt(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::GT);
                 break;
 
             case Tag::Gte:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_ge(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::GTE);
                 break;
 
             case Tag::Lt:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_lt(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::LT);
                 break;
 
             case Tag::Lte:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_le(a, b); },
-                    leastCommonArgRepresentation(i));
+                    leastCommonArgRepresentation(i), BinopKind::LTE);
                 break;
 
             case Tag::LOr:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_or(a, b); },
-                    Representation::Integer);
+                    Representation::Integer, BinopKind::LOR);
                 break;
 
             case Tag::LAnd:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_and(a, b); },
-                    Representation::Integer);
+                    Representation::Integer, BinopKind::LAND);
                 break;
 
             case Tag::Add:
@@ -834,8 +929,9 @@ void PirCodeFunction::build() {
                              BinopKind::MUL);
                 break;
             case Tag::Div:
-                compileBinop(i, [&](jit_value a, jit_value b) { return a / b; },
-                             BinopKind::DIV);
+                compileBinop(
+                    i, [&](jit_value a, jit_value b) { return insn_div(a, b); },
+                    BinopKind::DIV);
                 break;
 
             case Tag::ScheduledDeopt: {
@@ -1082,6 +1178,27 @@ void PirCodeFunction::build() {
                 break;
             }
 
+            //            case Tag::StaticCall: {
+            //                auto b = StaticCall::Cast(i);
+            //                std::vector<Value*> args;
+            //                b->eachCallArg([&](Value* v) { args.push_back(v);
+            //                });
+            //                setVal(i, withCallFrame(i, args, [&]() ->
+            //                jit_value {
+            //                           return call(
+            //                               NativeBuiltins::call,
+            //                               {
+            //                                   paramCode(),
+            //                                   new_constant(b->srcIdx),
+            //                                   new_constant(b->cls()->rirClosure()),
+            //                                   loadSxp(i, b->env()),
+            //                                   new_constant(b->nCallArgs()),
+            //                                   paramCtx(),
+            //                               });
+            //                       }));
+            //                break;
+            //            }
+
             case Tag::Call: {
                 auto b = Call::Cast(i);
                 std::vector<Value*> args;
@@ -1106,7 +1223,7 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            if (!success && debug2) {
+            if (!success) {
                 std::cerr << "Can't compile ";
                 i->print(std::cerr, true);
                 std::cerr << "\n";
@@ -1120,8 +1237,7 @@ void PirCodeFunction::build() {
 
     if (success && debug2) {
         std::cout << "******************* SUCCESS ************************\n";
-        if (debug)
-            jit_dump_function(stdout, raw(), "test");
+        jit_dump_function(stdout, raw(), "test");
     }
 
     if (!success && debug2) {
