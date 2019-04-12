@@ -177,7 +177,7 @@ class PirCodeFunction : public jit_function {
 
     void setVal(Instruction* i, jit_value val) {
         assert(!valueMap.count(i));
-        if (i->producesRirResult() && representation.at(i) != val.type()) {
+        if (i->producesRirResult() && representationOf(i) != val.type()) {
             jit_dump_function(stdout, raw(), "test");
             i->print(std::cout);
             std::cout << "\nWanted a " << representation.at(i) << " but got a "
@@ -306,7 +306,11 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* v,
     }
 
     if (res.type() == jit_type_int && needed == jit_type_float64) {
+        // TODO should we deal with na here?
         res = insn_convert(res, jit_type_float64, false);
+    } else if (res.type() == jit_type_float64 && needed == jit_type_int) {
+        // TODO should we deal with na here?
+        res = insn_convert(res, jit_type_int, false);
     } else if (res.type() == jit_type_int && needed == sxp) {
         if (v->type.isA(PirType() | RType::integer))
             res = boxInt(pos, res);
@@ -320,7 +324,17 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* v,
         res = boxReal(pos, res);
     }
 
-    assert(res.type() == needed);
+    if (res.type() != needed) {
+        std::cout << "Failed to load ";
+        if (auto i = Instruction::Cast(v))
+            i->print(std::cout, true);
+        else
+            v->printRef(std::cout);
+        std::cout << " for the instruction ";
+        pos->print(std::cout, true);
+        std::cout << " in the representation " << needed << "\n";
+        assert(false);
+    }
 
     return res;
 }
@@ -832,7 +846,7 @@ void PirCodeFunction::build() {
                 if (r1 == Representation::Sexp) {
                     res = call(NativeBuiltins::asLogical, {loadSxp(i, arg)});
                 } else if (r1 == Representation::Real) {
-                    auto res = insn_dup(load(i, arg, Representation::Integer));
+                    res = insn_dup(load(i, arg, Representation::Integer));
 
                     auto narg = load(i, arg, Representation::Real);
                     jit_label noNa;
