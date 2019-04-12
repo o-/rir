@@ -21,6 +21,7 @@ static jit_type_t double1[1] = {jit_type_float64};
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
+static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 static jit_type_t sxp3_void[4] = {sxp, sxp, sxp, jit_type_void_ptr};
 
 NativeBuiltin NativeBuiltins::forcePromise = {
@@ -192,7 +193,7 @@ NativeBuiltin NativeBuiltins::createPromise = {
 
 SEXP newLglImpl(int i) {
     auto res = Rf_allocVector(LGLSXP, 1);
-    INTEGER(res)[0] = i;
+    LOGICAL(res)[0] = i;
     return res;
 }
 
@@ -231,7 +232,6 @@ NativeBuiltin NativeBuiltins::newLgl = {
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
-        SEXP call = R_NilValue;                                                \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         res = blt(call, prim, arglist, env);                                   \
@@ -259,10 +259,12 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
-static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, BinopKind kind) {
+static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
+                         BinopKind kind) {
     SEXP res = nullptr;
     SEXP arglist2 = CONS_NR(rhs, R_NilValue);
     SEXP arglist = CONS_NR(lhs, arglist2);
+    SEXP call = src_pool_at(globalContext(), srcIdx);
 
     PROTECT(arglist);
     switch (kind) {
@@ -309,8 +311,8 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, BinopKind kind) {
 }
 
 NativeBuiltin NativeBuiltins::binopEnv = {
-    "binop", (void*)&binopEnvImpl, 4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+    "binopEnv", (void*)&binopEnvImpl, 5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int2, 5, 0),
 };
 
 bool debugBinopImpl = false;
@@ -323,6 +325,7 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     arglist2.u.listsxp.carval = rhs;
     SEXP arglist = &arglist1;
     SEXP env = R_NilValue;
+    SEXP call = R_NilValue;
 
     if (debugBinopImpl) {
         debugBinopImpl = false;

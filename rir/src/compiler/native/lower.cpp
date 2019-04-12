@@ -305,12 +305,20 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* v,
         // fall through, since more conversions might be needed after unboxing
     }
 
-    if (res.type() == jit_type_int && needed == jit_type_float64)
+    if (res.type() == jit_type_int && needed == jit_type_float64) {
         res = insn_convert(res, jit_type_float64, false);
-    else if (res.type() == jit_type_int && needed == sxp)
-        res = boxInt(pos, res);
-    else if (res.type() == jit_type_float64 && needed == sxp)
+    } else if (res.type() == jit_type_int && needed == sxp) {
+        if (v->type.isA(PirType() | RType::integer))
+            res = boxInt(pos, res);
+        else if (v->type.isA(PirType() | RType::logical))
+            res = boxLgl(pos, res);
+        else if (v->type.isA(NativeType::test))
+            res = boxLgl(pos, res);
+        else
+            assert(false);
+    } else if (res.type() == jit_type_float64 && needed == sxp) {
         res = boxReal(pos, res);
+    }
 
     assert(res.type() == needed);
 
@@ -561,11 +569,6 @@ PirCodeFunction::PirCodeFunction(
                 update(i, representationOf(i));
                 break;
 
-            case Tag::LAnd:
-            case Tag::LOr:
-                update(i, Representation::Integer);
-                break;
-
             case Tag::Add:
             case Tag::Sub:
             case Tag::Mul:
@@ -581,6 +584,10 @@ PirCodeFunction::PirCodeFunction(
                 update(i, r);
                 break;
             }
+
+            case Tag::AsLogical:
+            case Tag::LAnd:
+            case Tag::LOr:
             case Tag::IsObject:
             case Tag::AsTest: {
                 update(i, Representation::Integer);
@@ -638,9 +645,9 @@ void PirCodeFunction::build() {
                 auto val = jit_value_create(raw(), representation.at(i));
                 phis[i] = val;
                 phi->eachArg([&](BB*, Value* v) {
-                    auto c = PirCopy::Cast(v);
-                    assert(c);
-                    phis[c] = val;
+                    auto i = Instruction::Cast(v);
+                    assert(i);
+                    phis[i] = val;
                 });
             }
         }
@@ -668,9 +675,11 @@ void PirCodeFunction::build() {
             jit_value res;
             gcSafepoint(i, -1, true);
             if (i->hasEnv()) {
+                success = false;
                 auto e = loadSxp(i, i->env());
                 res = call(NativeBuiltins::binopEnv,
-                           {a, b, e, new_constant((int)kind)});
+                           {a, b, e, new_constant(i->srcIdx),
+                            new_constant((int)kind)});
             } else {
                 res = call(NativeBuiltins::binop,
                            {a, b, new_constant((int)kind)});
@@ -730,7 +739,8 @@ void PirCodeFunction::build() {
             if (i->hasEnv()) {
                 auto e = loadSxp(i, i->env());
                 setVal(i, call(NativeBuiltins::binopEnv,
-                               {a, b, e, new_constant((int)kind)}));
+                               {a, b, e, new_constant(i->srcIdx),
+                                new_constant((int)kind)}));
             } else {
                 setVal(i, call(NativeBuiltins::binop,
                                {a, b, new_constant((int)kind)}));
@@ -806,9 +816,6 @@ void PirCodeFunction::build() {
             case Tag::PirCopy: {
                 auto c = PirCopy::Cast(i);
                 auto in = c->arg<0>().val();
-                if (phis.count(c))
-                    store(phis.at(c),
-                          load(i, in, Representation(phis.at(c).type())));
                 setVal(i, loadSame(i, in));
                 break;
             }
@@ -819,7 +826,7 @@ void PirCodeFunction::build() {
                 auto r1 = representationOf(arg);
                 auto r2 = representationOf(i);
 
-                assert(r2 != Representation::Real);
+                assert(r2 == Representation::Integer);
 
                 jit_value res;
                 if (r1 == Representation::Sexp) {
@@ -837,10 +844,7 @@ void PirCodeFunction::build() {
                     insn_label(noNa);
                 } else {
                     assert(r1 == Representation::Integer);
-                }
-
-                if (r2 == Representation::Sexp) {
-                    res = boxLgl(i, res);
+                    res = load(i, arg, Representation::Integer);
                 }
 
                 setVal(i, res);
@@ -1313,6 +1317,13 @@ void PirCodeFunction::build() {
                 i->print(std::cerr, true);
                 std::cerr << "\n";
             }
+
+            if (!success)
+                return;
+
+            if (phis.count(i))
+                store(phis.at(i),
+                      load(i, i, Representation(phis.at(i).type())));
 
             if (representationOf(i) == Representation::Sexp &&
                 needsEnsureNamed.count(i)) {
