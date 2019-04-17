@@ -588,6 +588,7 @@ PirCodeFunction::PirCodeFunction(
             case Tag::Mul:
             case Tag::Div:
             case Tag::PirCopy:
+            case Tag::ChkMissing:
             case Tag::Phi: {
                 Representation r = representationOf(i);
                 i->eachArg([&](Value* v) {
@@ -602,6 +603,7 @@ PirCodeFunction::PirCodeFunction(
             case Tag::AsLogical:
             case Tag::LAnd:
             case Tag::LOr:
+            case Tag::IsType:
             case Tag::IsObject:
             case Tag::AsTest: {
                 update(i, Representation::Integer);
@@ -865,6 +867,33 @@ void PirCodeFunction::build() {
                 break;
             }
 
+            case Tag::CastType: {
+                setVal(i, load(i, i->arg(0).val(), representationOf(i)));
+                break;
+            }
+
+            case Tag::ChkMissing: {
+                auto arg = i->arg(0).val();
+                if (representationOf(arg) == Representation::Sexp)
+                    checkMissing(loadSxp(i, arg));
+                setVal(i, loadSame(i, arg));
+                break;
+            }
+
+            case Tag::IsType: {
+                if (representation.at(i) != Representation::Integer) {
+                    success = false;
+                    break;
+                }
+
+                // auto arg = i->arg(0).val();
+                // if (representationOf(arg) == Representation::Sexp)
+                //    TODO
+                // else
+                setVal(i, new_constant((int)1));
+                break;
+            }
+
             case Tag::IsObject: {
                 if (representation.at(i) != Representation::Integer) {
                     success = false;
@@ -875,7 +904,7 @@ void PirCodeFunction::build() {
                 if (representationOf(arg) == Representation::Sexp)
                     setVal(i, isObj(loadSxp(i, arg)));
                 else
-                    setVal(i, new_constant((int)0));
+                    setVal(i, new_constant((int)1));
                 break;
             }
 
@@ -1221,7 +1250,7 @@ void PirCodeFunction::build() {
             case Tag::Force: {
                 auto f = Force::Cast(i);
                 auto arg = loadSxp(i, f->arg<0>().val());
-                if (!f->mayForcePromises())
+                if (!f->effects.includes(Effect::Force))
                     setVal(i, depromise(arg));
                 else
                     setVal(i, force(i, arg));
@@ -1326,7 +1355,7 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            if (!success && debug) {
+            if (!success) {
                 std::cerr << "Can't compile ";
                 i->print(std::cerr, true);
                 std::cerr << "\n";
