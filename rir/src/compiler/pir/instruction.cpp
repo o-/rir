@@ -738,6 +738,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
+    given.add(Assumption::NoReflectiveArgument);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
