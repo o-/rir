@@ -1514,13 +1514,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     if (c->nativeCode) {
-        if (!callCtxt || callCtxt->hasStackArgs() ||
-            (callCtxt->suppliedArgs == 0 &&
-             callCtxt->givenAssumptions.includes(
-                 Assumption::NotTooFewArguments))) {
-            void* args = callCtxt ? (void*)callCtxt->stackArgs : (void*)0xdead;
-            return c->nativeCode(c, ctx, args, env,
-                                 callCtxt ? callCtxt->callee : nullptr);
+        if (callCtxt && !callCtxt->hasStackArgs() && !callCtxt->hasNames()) {
+            void* stackBase = R_BCNodeStackTop;
+            for (size_t i = 0; i < callCtxt->suppliedArgs; ++i) {
+                if (callCtxt->missingArg(i))
+                    ostack_push(ctx, R_MissingArg);
+                else
+                    ostack_push(ctx, createPromise(callCtxt->implicitArg(i),
+                                                   callCtxt->callerEnv));
+            }
+            auto res = c->nativeCode(c, ctx, stackBase, env, callCtxt->callee);
+            ostack_popn(ctx, callCtxt->suppliedArgs);
+            return res;
+        }
+        if (!callCtxt || callCtxt->hasStackArgs()) {
+            return c->nativeCode(
+                c, ctx, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
+                callCtxt ? callCtxt->callee : nullptr);
         }
         // TODO: figure out how to create some adapter frame here. If we fix the
         // fall through case, we don't have to emit rir bytecode as fallback
