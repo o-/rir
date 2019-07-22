@@ -2022,6 +2022,24 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(lddots_) {
+            SEXP result = R_NilValue;
+            SEXP pos = result;
+            SEXP ellipsis = Rf_findVar(R_DotsSymbol, env);
+            if (TYPEOF(ellipsis) == DOTSXP) {
+                while (ellipsis != R_NilValue) {
+                    SEXP name = TAG(ellipsis);
+                    SEXP promise = Rf_mkPROMISE(CAR(ellipsis), env);
+                    __listAppend(&result, &pos, promise, name);
+                    ellipsis = CDR(ellipsis);
+                }
+            }
+            if (pos != result)
+                UNPROTECT(1);
+            ostack_push(ctx, result);
+            NEXT();
+        }
+
         INSTRUCTION(ldddvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();

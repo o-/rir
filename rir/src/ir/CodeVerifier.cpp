@@ -109,6 +109,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
+    case Opcode::lddots_:
     case Opcode::ldvar_:
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:

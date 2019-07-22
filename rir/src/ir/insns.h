@@ -108,6 +108,11 @@ DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
 DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 
 /**
+ * lddots_:: loads / creates ... to be used as call argument
+ */
+DEF_INSTR(lddots_, 0, 0, 1, 0)
+
+/**
  * ldarg_:: load argument
  */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)

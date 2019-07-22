@@ -1032,8 +1032,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (*arg == R_DotsSymbol) {
             callArgs.push_back(DOTS_ARG_IDX);
             names.push_back(R_NilValue);
+            eagerVal.push_back(nullptr);
             // TODO: figure out how to support dots symbol in call_ bytecode
-            unroll = false;
             continue;
         }
         if (*arg == R_MissingArg) {
@@ -1080,6 +1080,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         for (auto& a : callArgs) {
             if (a == MISSING_ARG_IDX) {
                 cs << BC::push(R_MissingArg);
+            } else if (a == DOTS_ARG_IDX) {
+                cs << BC::lddots();
             } else {
                 if (auto ev = eagerVal[i]) {
                     cs << BC::push(ev);
