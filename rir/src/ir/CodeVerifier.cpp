@@ -57,7 +57,8 @@ class State {
         else
             ostack -= bc.popCount();
         check();
-        ostack += bc.pushCount();
+        if (bc.bc != Opcode::lddots_)
+            ostack += bc.pushCount();
     }
 
     BC cur(Code* code) { return BC::decode(pc, code); }

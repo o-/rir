@@ -110,7 +110,7 @@ DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 /**
  * lddots_:: loads / creates ... to be used as call argument
  */
-DEF_INSTR(lddots_, 0, 0, 1, 0)
+DEF_INSTR(lddots_, 0, 0, -1, 0)
 
 /**
  * ldarg_:: load argument

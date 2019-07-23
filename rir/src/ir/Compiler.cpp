@@ -1034,6 +1034,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             names.push_back(R_NilValue);
             eagerVal.push_back(nullptr);
             // TODO: figure out how to support dots symbol in call_ bytecode
+            if (hasNames)
+                unroll = false;
             continue;
         }
         if (*arg == R_MissingArg) {
@@ -1075,14 +1077,17 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
+    size_t staticNargs = 0;
     if (unroll) {
         size_t i = 0;
         for (auto& a : callArgs) {
             if (a == MISSING_ARG_IDX) {
                 cs << BC::push(R_MissingArg);
+                staticNargs++;
             } else if (a == DOTS_ARG_IDX) {
                 cs << BC::lddots();
             } else {
+                staticNargs++;
                 if (auto ev = eagerVal[i]) {
                     cs << BC::push(ev);
                     cs << BC::mkEagerPromise(a);
@@ -1095,14 +1100,14 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     }
     if (hasNames) {
         if (unroll) {
-            cs << BC::call(callArgs.size(), names, ast, assumptions);
+            cs << BC::call(staticNargs, names, ast, assumptions);
         } else {
             cs << BC::callImplicit(callArgs, names, ast, assumptions);
         }
     } else {
         assumptions.add(Assumption::CorrectOrderOfArguments);
         if (unroll) {
-            cs << BC::call(callArgs.size(), ast, assumptions);
+            cs << BC::call(staticNargs, ast, assumptions);
         } else {
             cs << BC::callImplicit(callArgs, ast, assumptions);
         }

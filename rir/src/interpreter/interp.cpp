@@ -1553,6 +1553,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
     bool existingLocals = localsBase;
+    size_t dotsExpanded = 0;
 
     BindingCache* bindingCache;
     if (cache) {
@@ -2023,20 +2024,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(lddots_) {
-            SEXP result = R_NilValue;
-            SEXP pos = result;
             SEXP ellipsis = Rf_findVar(R_DotsSymbol, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    SEXP name = TAG(ellipsis);
-                    SEXP promise = Rf_mkPROMISE(CAR(ellipsis), env);
-                    __listAppend(&result, &pos, promise, name);
+                    // SEXP name = TAG(ellipsis);
+                    auto arg = CAR(ellipsis);
+                    if (TYPEOF(arg) == LANGSXP || TYPEOF(arg) == SYMSXP)
+                        arg = Rf_mkPROMISE(arg, env);
+                    ostack_push(ctx, arg);
                     ellipsis = CDR(ellipsis);
+                    dotsExpanded++;
+                    // TODO: deal with names
                 }
             }
-            if (pos != result)
-                UNPROTECT(1);
-            ostack_push(ctx, result);
             NEXT();
         }
 
@@ -2278,6 +2278,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             // Stack contains [callee, arg1, ..., argn]
             Immediate n = readImmediate();
+            n += dotsExpanded;
+            dotsExpanded = 0;
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
@@ -2302,6 +2304,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             // Stack contains [callee, arg1, ..., argn]
             Immediate n = readImmediate();
+            n += dotsExpanded;
+            dotsExpanded = 0;
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
