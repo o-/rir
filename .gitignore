@@ -34,3 +34,5 @@ benchmarks/
 /bin
 .bin_create
 *.DS_Store
+external/llvm-8.0.0.src
+external/llvm-8.0.0

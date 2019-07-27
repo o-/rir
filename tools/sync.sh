@@ -84,3 +84,17 @@ function build_r {
 }
 
 build_r custom-r
+
+LLVM_DIR="${SRC_DIR}/external/llvm-8.0.0.src"
+if [ ! -d $LLVM_DIR ]; then
+    cd "${SRC_DIR}/external"
+    wget http://releases.llvm.org/8.0.0/llvm-8.0.0.src.tar.xz
+    tar xf llvm-8.0.0.src.tar.xz
+    mkdir llvm-8.0.0
+    cd llvm-8.0.0.src
+    mkdir build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -GNinja ..
+    ninja
+    cmake -DCMAKE_INSTALL_PREFIX=../../llvm-8.0.0 -P cmake_install.cmake
+fi

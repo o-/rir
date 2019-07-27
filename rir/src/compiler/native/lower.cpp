@@ -958,6 +958,7 @@ void PirCodeFunction::build() {
         insn_branch(done);
 
         insn_label(isNa);
+        // TODO: fix bug when res is double
         store(res, new_constant(NA_INTEGER));
 
         insn_label(done);
@@ -1923,6 +1924,8 @@ void* Lower::tryCompile(
     function.compile();
     function.build_end();
 
+    if (cls->name().substr(0, 10) != "mandelbrot")
+        return nullptr;
     if (function.success) {
         // auto ctx = globalContext();
         // void* args[1] = {&ctx};

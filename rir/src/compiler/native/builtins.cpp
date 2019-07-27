@@ -80,7 +80,9 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
 }
 
 NativeBuiltin NativeBuiltins::createEnvironment = {
-    "createEnvironment", (void*)createEnvironmentImpl, 3,
+    "createEnvironment",
+    (void*)&createEnvironmentImpl,
+    3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
@@ -100,7 +102,7 @@ static jit_type_t createStubEnvironmentSignature[4] = {
     sxp, jit_type_sys_int, jit_type_void_ptr, jit_type_sys_int};
 NativeBuiltin NativeBuiltins::createStubEnvironment = {
     "createStubEnvironment",
-    (void*)createStubEnvironmentImpl,
+    (void*)&createStubEnvironmentImpl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp,
                               createStubEnvironmentSignature, 4, 0),
@@ -193,7 +195,7 @@ static jit_type_t externalsxpSetEntrySignature[4] = {sxp, jit_type_sys_int,
                                                      sxp};
 NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
     "externalsxpSetEntry",
-    (void*)externalsxpSetEntryImpl,
+    (void*)&externalsxpSetEntryImpl,
     3,
     jit_type_create_signature(jit_abi_cdecl, sxp, externalsxpSetEntrySignature,
                               3, 0),
@@ -294,7 +296,7 @@ SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
 
 NativeBuiltin NativeBuiltins::createClosure = {
     "createClosure",
-    (void*)createClosureImpl,
+    (void*)&createClosureImpl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp4, 4, 0),
 };
@@ -625,7 +627,9 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
 static jit_type_t deoptType[4] = {jit_type_void_ptr, sxp, jit_type_void_ptr,
                                   jit_type_void_ptr};
 NativeBuiltin NativeBuiltins::deopt = {
-    "deopt", (void*)deoptImpl, 4,
+    "deopt",
+    (void*)&deoptImpl,
+    4,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, deoptType, 4, 0),
 };
 
@@ -634,7 +638,9 @@ void assertFailImpl(const char* msg) {
     asm("int3");
 }
 NativeBuiltin NativeBuiltins::assertFail = {
-    "assertFail", (void*)assertFailImpl, 1,
+    "assertFail",
+    (void*)&assertFailImpl,
+    1,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, ptr1, 1, 0),
 };
 
@@ -665,7 +671,7 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 
 NativeBuiltin NativeBuiltins::extract11 = {
     "extract1_1D",
-    (void*)extract11Impl,
+    (void*)&extract11Impl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
@@ -689,7 +695,7 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 
 NativeBuiltin NativeBuiltins::extract21 = {
     "extract2_1D",
-    (void*)extract21Impl,
+    (void*)&extract21Impl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
