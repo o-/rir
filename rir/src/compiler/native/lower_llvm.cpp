@@ -173,6 +173,7 @@ class LLVMJitCompiler {
     LivenessIntervals liveness;
     size_t numLocals;
     llvm::Value* basepointer;
+    llvm::Value* constantpool;
 
   public:
     LLVMJitCompiler(ClosureVersion* cls, Code* code, llvm::Function* fun,
@@ -196,35 +197,42 @@ class LLVMJitCompiler {
 
     std::unordered_map<Value*, llvm::Value*> valueMap;
 
-    llvm::Value* constant(SEXP c, llvm::Type* needed) {
+    llvm::Value* constant(SEXP co, llvm::Type* needed) {
         static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
                                                    R_FalseValue, R_UnboundValue,
                                                    R_MissingArg, R_GlobalEnv};
         if (needed == t::Int) {
-            assert(Rf_length(c) == 1);
-            if (TYPEOF(c) == INTSXP)
+            assert(Rf_length(co) == 1);
+            if (TYPEOF(co) == INTSXP)
                 return llvm::ConstantInt::get(C,
-                                              llvm::APInt(32, INTEGER(c)[0]));
-            if (TYPEOF(c) == REALSXP) {
-                return llvm::ConstantInt::get(C,
-                                              llvm::APInt(32, (int)REAL(c)[0]));
+                                              llvm::APInt(32, INTEGER(co)[0]));
+            if (TYPEOF(co) == REALSXP) {
+                return llvm::ConstantInt::get(
+                    C, llvm::APInt(32, (int)REAL(co)[0]));
             }
-            if (TYPEOF(c) == LGLSXP)
+            if (TYPEOF(co) == LGLSXP)
                 return llvm::ConstantInt::get(C,
-                                              llvm::APInt(32, LOGICAL(c)[0]));
+                                              llvm::APInt(32, LOGICAL(co)[0]));
         }
 
         if (needed == t::Double) {
-            assert(Rf_length(c) == 1);
-            if (TYPEOF(c) == INTSXP)
+            assert(Rf_length(co) == 1);
+            if (TYPEOF(co) == INTSXP)
                 return llvm::ConstantFP::get(
-                    C, llvm::APFloat((double)INTEGER(c)[0]));
-            if (TYPEOF(c) == REALSXP)
-                return llvm::ConstantFP::get(C, llvm::APFloat(REAL(c)[0]));
+                    C, llvm::APFloat((double)INTEGER(co)[0]));
+            if (TYPEOF(co) == REALSXP)
+                return llvm::ConstantFP::get(C, llvm::APFloat(REAL(co)[0]));
         }
 
         assert(needed == t::SEXP);
-        return convertToPointer(c);
+        if (TYPEOF(co) == SYMSXP || eternal.count(co))
+            return convertToPointer(co);
+
+        auto i = Pool::insert(co);
+        llvm::Value* pos = builder.CreateLoad(constantpool);
+        pos = builder.CreateBitCast(dataPtr(pos), PointerType::get(t::SEXP, 0));
+        pos = builder.CreateGEP(pos, c(i));
+        return builder.CreateLoad(pos);
     }
 
     llvm::Value* nodestackPtr() {
@@ -1082,6 +1090,10 @@ bool LLVMJitCompiler::tryCompile(
         arg++;
     }
 
+    constantpool =
+        builder.CreateBitCast(paramCtx(), PointerType::get(t::SEXP, 0));
+    constantpool = builder.CreateGEP(constantpool, c(1));
+
     if (numLocals > 0)
         incStack(numLocals, true);
 
@@ -1474,7 +1486,6 @@ bool LLVMJitCompiler::tryCompile(
                     MDNode* WeightNode = MDB.createBranchWeights(1, 0);
                     br->setMetadata(LLVMContext::MD_prof, WeightNode);
                 }
-                blockExitMapping_[bb] = builder.GetInsertBlock();
                 break;
             }
 
