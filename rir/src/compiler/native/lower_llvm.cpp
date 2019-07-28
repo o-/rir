@@ -29,7 +29,7 @@ namespace pir {
 
 using namespace llvm;
 
-static LLVMContext C;
+LLVMContext& C = rir::pir::JitLLVM::C;
 
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
@@ -133,10 +133,7 @@ class LowerFunctionLLVM {
             {t::voidPtr, t::voidPtr, t::stackCellPtr, t::SEXP, t::SEXP});
         FunctionType* signature = FunctionType::get(t::SEXP, args, false);
 
-        std::stringstream ss;
-        ss << (size_t)cls;
-        auto name = ss.str();
-        fun = JitLLVM::declare(name, signature);
+        fun = JitLLVM::declare(cls->name(), signature);
     }
 
     static llvm::Value* convertToPointer(void* what, Type* ty = t::voidPtr) {
@@ -175,6 +172,8 @@ class LowerFunctionLLVM {
     llvm::Value* unboxLgl(llvm::Value* v);
     llvm::Value* unboxReal(llvm::Value* v);
     llvm::Value* unboxRealIntLgl(llvm::Value* v);
+
+    void setVisible(int i);
 
     std::array<std::string, 5> argNames = {"code", "ctx", "args", "env",
                                            "closure"};
@@ -228,6 +227,10 @@ class LowerFunctionLLVM {
 
     bool tryCompile();
 };
+
+void LowerFunctionLLVM::setVisible(int i) {
+    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::IntPtr));
+}
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
 
@@ -1108,11 +1111,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
                     break;
 
                 case Tag::Invisible:
-                    // TODO
+                    setVisible(0);
                     break;
 
                 case Tag::Visible:
-                    // TODO
+                    setVisible(1);
                     break;
 
                 case Tag::Identical: {
@@ -1700,9 +1703,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
             }
         });
 
-    if (success)
-        fun->dump();
-    return success;
+        if (success) {
+            outs() << "Compiled " << fun->getName() << "\n";
+            //     fun->dump();
+        }
+        return success;
 }
 
 } // namespace pir
@@ -1718,6 +1723,7 @@ void* LowerLLVM::tryCompile(
     const std::unordered_map<Promise*, unsigned>& m,
     const std::unordered_set<Instruction*>& needsEnsureNamed) {
 
+    JitLLVM::createModule();
     LowerFunctionLLVM funCompiler(cls, code, m, needsEnsureNamed);
     if (!funCompiler.tryCompile())
         return nullptr;

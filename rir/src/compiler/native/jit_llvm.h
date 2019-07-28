@@ -8,6 +8,8 @@ namespace pir {
 
 class JitLLVM {
   public:
+    static llvm::LLVMContext C;
+    static void createModule();
     static void* tryCompile(llvm::Function*);
     static llvm::Function* declare(const std::string& name,
                                    llvm::FunctionType* signature);

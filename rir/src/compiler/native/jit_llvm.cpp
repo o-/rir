@@ -62,7 +62,7 @@ namespace {
 using namespace llvm;
 using namespace llvm::orc;
 
-static LLVMContext C;
+LLVMContext& C = rir::pir::JitLLVM::C;
 
 class JitLLVMImplementation {
   private:
@@ -115,19 +115,22 @@ class JitLLVMImplementation {
 
     llvm::Module* module;
 
-    void* tryCompile(llvm::Function* fun) {
-        module = new llvm::Module(fun->getName(), C);
+    void createModule() {
+        module = new llvm::Module("", C);
         module->setDataLayout(TM->createDataLayout());
+    }
 
+    void* tryCompile(llvm::Function* fun) {
+        auto name = fun->getName();
         verifyFunction(*fun);
-
         auto K = ES.allocateVModule();
         cantFail(
             OptimizeLayer.addModule(K, std::unique_ptr<llvm::Module>(module)));
-        auto res = OptimizeLayer.findSymbol(fun->getName(), true);
+        auto res = OptimizeLayer.findSymbol(name, true);
         auto adr = res.getAddress();
-        cantFail(OptimizeLayer.removeModule(K));
+        // cantFail(OptimizeLayer.removeModule(K));
         if (adr) {
+            assert(*adr);
             return (void*)*adr;
         }
         return nullptr;
@@ -140,7 +143,7 @@ class JitLLVMImplementation {
             InitializeNativeTargetAsmPrinter();
             InitializeNativeTargetAsmParser();
             rir::pir::initializeTypes(C);
-            singleton = std::make_unique<JitLLVMImplementation>();
+            singleton.reset(new JitLLVMImplementation());
         }
         return *singleton;
     }
@@ -229,7 +232,6 @@ class JitLLVMImplementation {
         // the JIT.
         for (auto& F : *M) {
             PM->run(F);
-            F.dump();
         }
 
         return M;
@@ -239,6 +241,12 @@ class JitLLVMImplementation {
 
 namespace rir {
 namespace pir {
+
+LLVMContext JitLLVM::C;
+
+void JitLLVM::createModule() {
+    JitLLVMImplementation::instance().createModule();
+}
 
 void* JitLLVM::tryCompile(llvm::Function* fun) {
     return JitLLVMImplementation::instance().tryCompile(fun);
