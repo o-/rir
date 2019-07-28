@@ -7,6 +7,7 @@ namespace pir {
 
 int initializeTypes(LLVMContext& context) {
     std::vector<Type*> fields;
+    t::i1 = IntegerType::get(context, 1);
     t::Int = IntegerType::get(context, 32);
     t::Double = Type::getDoubleTy(context);
 
@@ -110,6 +111,7 @@ int initializeTypes(LLVMContext& context) {
 
 namespace t {
 
+Type* i1;
 Type* Int;
 Type* Double;
 Type* Void;

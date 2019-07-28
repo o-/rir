@@ -13,6 +13,7 @@ namespace t {
 
 extern llvm::PointerType* SEXP;
 extern llvm::StructType* SEXP_u1;
+extern llvm::Type* i1;
 extern llvm::Type* Int;
 extern llvm::Type* Double;
 extern llvm::Type* Void;

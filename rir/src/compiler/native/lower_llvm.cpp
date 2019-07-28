@@ -553,6 +553,8 @@ class LLVMJitCompiler {
             std::cout << "\n";
             assert(false);
         }
+        if (!val->hasName())
+            val->setName(i->getRef());
         valueMap[i] = val;
     }
 
@@ -609,8 +611,8 @@ class LLVMJitCompiler {
             auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
             br = builder.CreateCondBr(isNotNa, notNa, isNa);
         }
-        // MDNode* WeightNode = MDB.createBranchWeights(0, 1);
-        // br->setMetadata(LLVMContext::MD_prof, WeightNode);
+        MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+        br->setMetadata(LLVMContext::MD_prof, WeightNode);
         builder.SetInsertPoint(notNa);
     }
 
@@ -618,7 +620,9 @@ class LLVMJitCompiler {
         auto ok = BasicBlock::Create(C, "", fun);
         auto nok = BasicBlock::Create(C, "", fun);
         auto t = builder.CreateICmpEQ(v, constant(R_MissingArg, t::SEXP));
-        builder.CreateCondBr(t, nok, ok);
+        auto br = builder.CreateCondBr(t, nok, ok);
+        MDNode* WeightNode = MDB.createBranchWeights(0, 1);
+        br->setMetadata(LLVMContext::MD_prof, WeightNode);
 
         builder.SetInsertPoint(nok);
         call(NativeBuiltins::error, {});
@@ -631,7 +635,9 @@ class LLVMJitCompiler {
         auto ok = BasicBlock::Create(C, "", fun);
         auto nok = BasicBlock::Create(C, "", fun);
         auto t = builder.CreateICmpEQ(v, constant(R_UnboundValue, t::SEXP));
-        builder.CreateCondBr(t, nok, ok);
+        auto br = builder.CreateCondBr(t, nok, ok);
+        MDNode* WeightNode = MDB.createBranchWeights(0, 1);
+        br->setMetadata(LLVMContext::MD_prof, WeightNode);
 
         builder.SetInsertPoint(nok);
         call(NativeBuiltins::error, {});
@@ -692,9 +698,11 @@ class LLVMJitCompiler {
         }
         tp = PointerType::get(tp, 0);
         auto trg = convertToPointer(builtin.fun);
-        trg->setName(builtin.name);
         trg = builder.CreateBitCast(trg, tp);
-        return builder.CreateCall(trg, args);
+        auto cl = builder.CreateCall(trg, args);
+        if (!cl->getType()->isVoidTy())
+            cl->setName(std::string(builtin.name) + "(..)");
+        return cl;
     }
 
     llvm::Value* box(Instruction* pos, llvm::Value* v, PirType t) {
@@ -742,8 +750,8 @@ class LLVMJitCompiler {
             auto nok = BasicBlock::Create(C, "", fun);
             auto br = builder.CreateCondBr(t, ok, nok);
 
-            // MDNode* WeightNode = MDB.createBranchWeights(10000, 1);
-            // br->setMetadata(LLVMContext::MD_prof, WeightNode);
+            MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+            br->setMetadata(LLVMContext::MD_prof, WeightNode);
             builder.SetInsertPoint(nok);
         }
 
@@ -977,8 +985,10 @@ class LLVMJIT {
 
         // Run the optimizations over all functions in the module being added to
         // the JIT.
-        for (auto& F : *M)
+        for (auto& F : *M) {
             PM->run(F);
+            F.dump();
+        }
 
         return M;
     }
@@ -1019,7 +1029,9 @@ void LLVMJitCompiler::insn_assert(llvm::Value* v, const char* msg) {
     auto nok = BasicBlock::Create(C, "assertFail", fun);
     auto ok = BasicBlock::Create(C, "assertOk", fun);
 
-    builder.CreateCondBr(v, ok, nok);
+    auto br = builder.CreateCondBr(v, ok, nok);
+    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+    br->setMetadata(LLVMContext::MD_prof, WeightNode);
 
     builder.SetInsertPoint(nok);
     call(NativeBuiltins::assertFail, {convertToPointer((void*)msg)});
@@ -1115,11 +1127,7 @@ bool LLVMJitCompiler::tryCompile(
             nacheck(a, isNaBr);
             nacheck(b, isNaBr);
 
-            if (res->getType() == t::Int) {
-                if (a->getType() == t::Double)
-                    a = builder.CreateFPToSI(a, t::Int);
-                if (b->getType() == t::Double)
-                    b = builder.CreateFPToSI(b, t::Int);
+            if (a->getType() == t::Int && b->getType() == t::Int) {
                 builder.CreateStore(builder.CreateZExt(intInsert(a, b), t::Int),
                                     res);
             } else {
@@ -1202,11 +1210,7 @@ bool LLVMJitCompiler::tryCompile(
             checkNa(a, lhsRep);
             checkNa(b, rhsRep);
 
-            if (res->getType() == t::Int) {
-                if (a->getType() == t::Double)
-                    a = builder.CreateFPToSI(a, t::Int);
-                if (b->getType() == t::Double)
-                    b = builder.CreateFPToSI(b, t::Int);
+            if (a->getType() == t::Int && b->getType() == t::Int) {
                 builder.CreateStore(intInsert(a, b), res);
             } else {
                 if (a->getType() == t::Int)
@@ -1359,12 +1363,20 @@ bool LLVMJitCompiler::tryCompile(
                                     auto ok = BasicBlock::Create(C, "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
-                                    builder.CreateCondBr(ofl, isNaBr, ok);
+                                    auto br =
+                                        builder.CreateCondBr(ofl, isNaBr, ok);
+                                    MDNode* WeightNode =
+                                        MDB.createBranchWeights(0, 1);
+                                    br->setMetadata(LLVMContext::MD_prof,
+                                                    WeightNode);
                                     builder.SetInsertPoint(ok);
 
                                     ok = BasicBlock::Create(C, "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
-                                    builder.CreateCondBr(ofl, isNaBr, ok);
+                                    br = builder.CreateCondBr(ofl, isNaBr, ok);
+                                    WeightNode = MDB.createBranchWeights(0, 1);
+                                    br->setMetadata(LLVMContext::MD_prof,
+                                                    WeightNode);
                                     builder.SetInsertPoint(ok);
 
                                     auto res0 = builder.CreateShl(xInt, yInt);
@@ -1378,12 +1390,20 @@ bool LLVMJitCompiler::tryCompile(
                                     auto ok = BasicBlock::Create(C, "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
-                                    builder.CreateCondBr(ofl, isNaBr, ok);
+                                    auto br =
+                                        builder.CreateCondBr(ofl, isNaBr, ok);
+                                    MDNode* WeightNode =
+                                        MDB.createBranchWeights(0, 1);
+                                    br->setMetadata(LLVMContext::MD_prof,
+                                                    WeightNode);
                                     builder.SetInsertPoint(ok);
 
                                     ok = BasicBlock::Create(C, "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
-                                    builder.CreateCondBr(ofl, isNaBr, ok);
+                                    br = builder.CreateCondBr(ofl, isNaBr, ok);
+                                    WeightNode = MDB.createBranchWeights(0, 1);
+                                    br->setMetadata(LLVMContext::MD_prof,
+                                                    WeightNode);
                                     builder.SetInsertPoint(ok);
 
                                     auto res0 = builder.CreateAShr(xInt, yInt);
@@ -1447,13 +1467,14 @@ bool LLVMJitCompiler::tryCompile(
                 cond = builder.CreateICmpNE(cond, c(0));
                 auto br = builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
                                                getBlock(bb->falseBranch()));
-                // if (bb->trueBranch()->isDeopt()) {
-                //    MDNode* WeightNode = MDB.createBranchWeights(1, 10000);
-                //    br->setMetadata(LLVMContext::MD_prof, WeightNode);
-                //} else if (bb->falseBranch()->isDeopt()) {
-                //    MDNode* WeightNode = MDB.createBranchWeights(10000, 1);
-                //    br->setMetadata(LLVMContext::MD_prof, WeightNode);
-                //}
+                if (bb->trueBranch()->isDeopt()) {
+                    MDNode* WeightNode = MDB.createBranchWeights(0, 1);
+                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                } else if (bb->falseBranch()->isDeopt()) {
+                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                }
+                blockExitMapping_[bb] = builder.GetInsertBlock();
                 break;
             }
 
@@ -1685,12 +1706,16 @@ bool LLVMJitCompiler::tryCompile(
                     auto isNotNa = builder.CreateFCmpOEQ(narg, narg);
                     narg = builder.CreateFPToSI(narg, t::Int);
                     setVal(i, narg);
-                    builder.CreateCondBr(isNotNa, done, isNa);
+                    auto br = builder.CreateCondBr(isNotNa, done, isNa);
+                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
                 } else {
                     auto narg = load(i, arg, Representation::Integer);
                     auto isNotNa = builder.CreateICmpNE(narg, c(NA_INTEGER));
                     setVal(i, narg);
-                    builder.CreateCondBr(isNotNa, done, isNa);
+                    auto br = builder.CreateCondBr(isNotNa, done, isNa);
+                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
                 }
 
                 builder.SetInsertPoint(isNa);
@@ -1765,6 +1790,7 @@ bool LLVMJitCompiler::tryCompile(
                 auto res =
                     call(NativeBuiltins::ldvar, {constant(ld->varName, t::SEXP),
                                                  loadSxp(i, ld->env())});
+                res->setName(CHAR(PRINTNAME(ld->varName)));
 
                 checkMissing(res);
                 checkUnbound(res);
