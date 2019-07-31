@@ -1489,9 +1489,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     if (c->nativeCode) {
-            return c->nativeCode(
-                c, ctx, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
-                callCtxt ? callCtxt->callee : nullptr);
+        return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
+                             env, callCtxt ? callCtxt->callee : nullptr);
     }
 
 #ifdef THREADED_CODE
