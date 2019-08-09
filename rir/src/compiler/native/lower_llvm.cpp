@@ -2965,6 +2965,27 @@ bool LowerFunctionLLVM::tryCompile() {
                             res);
                     }
 
+                    if (representationOf(i) != Representation::Sexp) {
+                        auto env = (extract->hasEnv())
+                                       ? loadSxp(i, extract->env())
+                                       : constant(R_NilValue, t::SEXP);
+                        llvm::Value* test = call(NativeBuiltins::extract21,
+                                                 {loadSxp(i, extract->vec()),
+                                                  loadSxp(i, extract->idx()),
+                                                  env, c(extract->srcIdx)});
+                        if (representationOf(i) == Representation::Integer) {
+                            test = unboxInt(test);
+                            insn_assert(builder.CreateICmpEQ(
+                                            builder.CreateLoad(res), test),
+                                        "Int Fastcase is wrong");
+                        } else {
+                            test = unboxReal(test);
+                            insn_assert(builder.CreateICmpEQ(
+                                            builder.CreateLoad(res), test),
+                                        "REal Fastcase is wrong");
+                        }
+                    }
+
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
