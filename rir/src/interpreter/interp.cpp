@@ -1621,6 +1621,27 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(pop_context_) { return ostack_pop(ctx); }
 
+        INSTRUCTION(mk_dotlist_) {
+            size_t n = readImmediate();
+            advanceImmediate();
+            SEXP res = R_NilValue;
+            auto names = (Immediate*)pc;
+            advanceImmediateN(n);
+            for (long i = n - 1; i >= 0; --i) {
+                SEXP val = ostack_pop(ctx);
+                INCREMENT_NAMED(val);
+                SEXP name = cp_pool_at(ctx, names[i]);
+                res = CONS_NR(val, res);
+                SET_TAG(res, name);
+            }
+
+            SET_TYPEOF(res, DOTSXP);
+            ostack_push(ctx, res);
+            UNPROTECT(1);
+
+            NEXT();
+        }
+
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();

@@ -876,6 +876,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::force_:
     case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
+    case Opcode::mk_dotlist_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
