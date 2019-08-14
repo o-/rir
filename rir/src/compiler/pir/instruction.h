@@ -1756,7 +1756,8 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType(RType::prom) | RType::missing);
+            pushArg(args[i], PirType(RType::prom) | RType::missing |
+                                 RType::expandedDots);
     }
 
     Closure* tryGetCls() const override final {
@@ -2018,6 +2019,29 @@ class FLI(PopContext, 2, Effect::ChangesContexts) {
     PirType inferType(const GetType& getType) const override final {
         return getType(result());
     }
+};
+
+class FLI(ExpandDots, 1, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    ExpandDots(Value* dots)
+        : FixedLenInstruction(RType::expandedDots, {{RType::dots}}, {{dots}}) {}
+};
+
+class VLI(DotsList, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    DotsList() : VarLenInstruction(RType::dots) {}
+
+    void addInput(SEXP name, Value* val) {
+        names.push_back(name);
+        VarLenInstruction::pushArg(val, val->type);
+    }
+
+    void pushArg(Value* a, PirType t) override {
+        assert(false && "use addInput");
+    }
+    void pushArg(Value* a) override { assert(false && "use addInput"); }
 };
 
 class VLI(Phi, Effects::None()) {

@@ -566,6 +566,17 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             switch (instr->tag) {
 
+            case Tag::ExpandDots: {
+                // TODO!!!!!!
+                break;
+            }
+
+            case Tag::DotsList: {
+                auto d = DotsList::Cast(instr);
+                cb.add(BC::mkDotlist(d->names));
+                break;
+            }
+
             case Tag::LdConst: {
                 cb.add(BC::push_from_pool(LdConst::Cast(instr)->idx));
                 break;

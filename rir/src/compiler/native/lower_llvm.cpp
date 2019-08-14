@@ -1724,6 +1724,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 return;
 
             switch (i->tag) {
+            case Tag::ExpandDots:
+            case Tag::DotsList:
+                success = false;
+                break;
+
             case Tag::PushContext: {
                 compilePushContext(i);
                 break;

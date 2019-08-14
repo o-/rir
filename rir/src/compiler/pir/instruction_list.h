@@ -47,6 +47,8 @@
     V(StVar)                                                                   \
     V(Branch)                                                                  \
     V(Phi)                                                                     \
+    V(DotsList)                                                                \
+    V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
     V(AsInt)                                                                   \

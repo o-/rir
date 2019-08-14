@@ -9,7 +9,7 @@ namespace pir {
 #define SET_ARGUSED(x, v) SETLEVELS(x, v)
 #define streql(s, t) (!strcmp((s), (t)))
 
-bool ArgumentMatcher::reorder(SEXP formals,
+bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                               const std::vector<BC::PoolIdx>& actualNames,
                               std::vector<Value*>& givenArgs) {
     // Build up the list of supplied args. We use the names from actualNames
@@ -212,18 +212,15 @@ bool ArgumentMatcher::reorder(SEXP formals,
 
     // End of copy/paste snippt. Collecting results.
 
-    if (seendots)
-        return false;
-
     RList result(actuals);
     for (auto r : result) {
-        if (r == R_DotsSymbol || TYPEOF(r) == DOTSXP) {
+        auto expected = TYPEOF(r) == DOTSXP || r == R_MissingArg ||
+                        r == R_DotsSymbol || TYPEOF(r) == INTSXP;
+        assert(expected && "Static argument matching bug, this "
+                           "actual value was not put there by us");
+        if (!expected)
             return false;
-        }
-        assert((r == R_MissingArg || TYPEOF(r) == INTSXP) &&
-               "Static argument matching bug, this "
-               "actual value was not put there by us");
-        if (TYPEOF(r) != INTSXP && r != R_MissingArg)
+        if (TYPEOF(r) == DOTSXP || r == R_DotsSymbol)
             return false;
     }
 
@@ -234,11 +231,37 @@ bool ArgumentMatcher::reorder(SEXP formals,
         if (TYPEOF(r) == INTSXP) {
             int idx = INTEGER(r)[0];
             givenArgs[pos++] = copy[idx];
-        } else {
-            assert(r == R_MissingArg);
+        } else if (r == R_MissingArg) {
             givenArgs[pos++] = MissingArg::instance();
+        } else if (r == R_DotsSymbol) {
+            // To pass `...` to the callee, we load the `...` from the
+            // environment and use the `ExpandDots` instruction, that expands
+            // the list into individual arguments.
+            auto ld = new LdVar(R_DotsSymbol, insert.env);
+            ld->type = RType::dots;
+            auto splat = new ExpandDots(ld);
+            insert(splat);
+            givenArgs[pos++] = splat;
+        } else if (TYPEOF(r) == DOTSXP) {
+            // We pass individual arguments, but the callee receives them as
+            // `...` list. Therefore we gobble all arguments up into a dotslist
+            // and pass them as a single arg.
+            auto dal = RList(r);
+            auto conv = new DotsList;
+            for (auto da = dal.begin(); da != dal.end(); ++da) {
+                assert(TYPEOF(*da) == INTSXP);
+                int idx = INTEGER(*da)[0];
+                conv->addInput(da.tag(), copy[idx]);
+            }
+            givenArgs[pos++] = conv;
+            insert(conv);
+        } else {
+            assert(false);
         }
     }
+
+    while (!givenArgs.empty() && givenArgs.back() == MissingArg::instance())
+        givenArgs.pop_back();
 
     return true;
 }

@@ -66,6 +66,9 @@ enum class RType : uint8_t {
     env,
     ast,
 
+    dots,
+    expandedDots,
+
     other,
 
     FIRST = nil,
@@ -207,7 +210,7 @@ struct PirType {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::missing | RType::unbound | RType::ast |
-                       RType::other)
+                       RType::dots | RType::expandedDots | RType::other)
             .orObject();
     }
     static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
@@ -556,6 +559,12 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::missing:
         out << "miss";
+        break;
+    case RType::dots:
+        out << "dots";
+        break;
+    case RType::expandedDots:
+        out << "*dots";
         break;
     case RType::other:
         out << "other";

@@ -425,7 +425,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   TYPEOF(monomorphic) == BUILTINSXP &&
                                   // TODO implement support for call_builtin_
                                   // with names
-                                  bc.bc == Opcode::call_;
+                                  bc.bc != Opcode::named_call_;
 
         if (monomorphicBuiltin) {
             int arity = getBuiltinArity(monomorphic);
@@ -513,21 +513,34 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        bool namedArguments = bc.bc != Opcode::call_;
         size_t missingArgs = 0;
         auto matchedArgs(args);
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
-            bool correctOrder = bc.bc != Opcode::named_call_;
-
-            if (!correctOrder) {
-                correctOrder = ArgumentMatcher::reorder(
-                    FORMALS(monomorphic), bc.callExtra().callArgumentNames,
-                    matchedArgs);
+            auto formals = RList(FORMALS(monomorphic));
+            size_t needed = 0;
+            bool hasDotsFormals = false;
+            for (auto a = formals.begin(); a != formals.end(); ++a) {
+                needed++;
+                hasDotsFormals =
+                    hasDotsFormals || (a.hasTag() && a.tag() == R_DotsSymbol);
             }
 
-            size_t needed = RList(FORMALS(monomorphic)).length();
+            bool correctOrder = !namedArguments && !hasDotsFormals;
+
+            if (!correctOrder) {
+                if (namedArguments) {
+                    correctOrder = ArgumentMatcher::reorder(
+                        insert, FORMALS(monomorphic),
+                        bc.callExtra().callArgumentNames, matchedArgs);
+                } else {
+                    correctOrder = ArgumentMatcher::reorder(
+                        insert, FORMALS(monomorphic), {}, matchedArgs);
+                }
+            }
 
             if (!correctOrder || needed < matchedArgs.size()) {
                 monomorphicClosure = false;
@@ -569,6 +582,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             given.numMissing(missingArgs);
             given.add(Assumption::NotTooManyArguments);
             given.add(Assumption::CorrectOrderOfArguments);
+            given.add(Assumption::StaticallyArgmatched);
 
             {
                 size_t i = 0;
