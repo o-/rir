@@ -79,9 +79,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     // `...` list as DOTSXP in the correct location, we can support them.
     // TODO: extend call instruction to do the necessary argument shuffling to
     // support it in all cases
-    if ( //! ctx.assumptions.includes(Assumption::StaticallyArgmatched) &&
+    if (!ctx.assumptions.includes(Assumption::StaticallyArgmatched) &&
         closure->formals().hasDots()) {
-        closure->rirFunction()->unoptimizable = true;
         logger.warn("no support for ...");
         return fail();
     }

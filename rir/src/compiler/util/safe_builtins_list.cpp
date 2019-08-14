@@ -58,6 +58,7 @@ bool SafeBuiltinsList::always(int builtin) {
         findBuiltin("is.vector"),
 
         findBuiltin("stdout"),
+        findBuiltin("("),
     };
 
     for (auto i : safeBuiltins)

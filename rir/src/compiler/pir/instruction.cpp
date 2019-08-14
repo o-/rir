@@ -505,6 +505,16 @@ void MkEnv::printArgs(std::ostream& out, bool tty) const {
     out << ", context " << context;
 }
 
+void DotsList::printArgs(std::ostream& out, bool tty) const {
+    size_t pos = 0;
+    eachArg([&](Value* v) {
+        out << CHAR(PRINTNAME(names[pos++])) << "=";
+        v->printRef(out);
+        if (pos != names.size())
+            out << ", ";
+    });
+}
+
 void Is::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
     out << ", " << Rf_type2char(sexpTag);
@@ -755,7 +765,8 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], PirType() | RType::prom | RType::missing);
+        pushArg(args[i], PirType() | RType::prom | RType::missing |
+                             RType::expandedDots | RType::dots);
     assert(tryDispatch());
 }
 
@@ -796,6 +807,8 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
+        if (arg->type.maybe(RType::expandedDots))
+            given.remove(Assumption::CorrectOrderOfArguments);
         writeArgTypeToAssumptions(given, arg, i);
         ++i;
     });

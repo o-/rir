@@ -56,6 +56,8 @@ class State {
             ostack = 0;
         else
             ostack -= bc.popCount();
+        if (ostack < 0)
+            code->print(std::cout);
         check();
         ostack += bc.pushCount();
     }

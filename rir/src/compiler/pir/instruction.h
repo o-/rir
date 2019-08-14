@@ -2042,6 +2042,8 @@ class VLI(DotsList, Effects::None()) {
         assert(false && "use addInput");
     }
     void pushArg(Value* a) override { assert(false && "use addInput"); }
+
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class VLI(Phi, Effects::None()) {

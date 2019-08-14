@@ -379,7 +379,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::call_dots_:
-        return false;
     case Opcode::named_call_:
     case Opcode::call_: {
         long nargs = bc.immediate.callFixedArgs.nargs;

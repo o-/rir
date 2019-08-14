@@ -564,10 +564,38 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 }
             }
 
+            auto compileCallDots =
+                [&](CallInstruction* call, unsigned srcIdx,
+                    const std::function<void()>& loadCallee,
+                    const std::function<SEXP(size_t)>& getName) {
+                    bool hasDotsArgs = false;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            hasDotsArgs = true;
+                    });
+                    if (!hasDotsArgs)
+                        return false;
+
+                    std::vector<SEXP> names;
+                    size_t p = 0;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            names.push_back(R_DotsSymbol);
+                        else
+                            names.push_back(getName(p));
+                        p++;
+                    });
+                    loadCallee();
+                    cb.add(BC::callDots(call->nCallArgs(), names,
+                                        Pool::get(srcIdx),
+                                        call->inferAvailableAssumptions()));
+                    return true;
+                };
+
             switch (instr->tag) {
 
             case Tag::ExpandDots: {
-                // TODO!!!!!!
+                // handled in calls
                 break;
             }
 
@@ -833,6 +861,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
+                if (compileCallDots(call, call->srcIdx, []() {},
+                                    [](size_t) { return R_NilValue; }))
+                    break;
+
                 cb.add(BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
                                 call->inferAvailableAssumptions()));
                 break;
@@ -840,6 +872,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
+                if (compileCallDots(call, call->srcIdx, []() {},
+                                    [&](size_t i) { return call->names[i]; }))
+                    break;
+
                 cb.add(BC::call(call->nCallArgs(), call->names,
                                 Pool::get(call->srcIdx),
                                 call->inferAvailableAssumptions()));
@@ -848,6 +884,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
+                if (compileCallDots(call, call->srcIdx,
+                                    [&]() {
+                                        cb.add(BC::push(
+                                            call->cls()->rirClosure()));
+                                        cb.add(BC::put(call->nCallArgs()));
+                                    },
+                                    [](size_t) { return R_NilValue; }))
+                    break;
+
                 SEXP originalClosure = call->cls()->rirClosure();
                 auto dt = DispatchTable::unpack(BODY(originalClosure));
                 if (auto trg = call->tryOptimisticDispatch()) {
@@ -886,6 +931,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
+                if (compileCallDots(blt, blt->srcIdx,
+                                    [&]() {
+                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::put(blt->nCallArgs()));
+                                    },
+                                    [](size_t) { return R_NilValue; }))
+                    break;
                 cb.add(BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
                                        blt->blt));
                 break;
@@ -893,6 +945,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::CallSafeBuiltin: {
                 auto blt = CallSafeBuiltin::Cast(instr);
+                if (compileCallDots(blt, blt->srcIdx,
+                                    [&]() {
+                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::put(blt->nCallArgs()));
+                                    },
+                                    [](size_t) { return R_NilValue; }))
+                    break;
                 cb.add(BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
                                        blt->blt));
                 break;

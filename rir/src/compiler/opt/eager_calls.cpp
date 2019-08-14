@@ -87,6 +87,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             auto next = ip + 1;
 
             auto flattenDotsArglist = [&](Instruction* i) {
+                return;
                 std::vector<Value*> args;
                 bool hasNames = false;
                 bool hasDots = false;

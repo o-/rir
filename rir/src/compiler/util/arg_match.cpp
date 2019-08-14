@@ -220,8 +220,6 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                            "actual value was not put there by us");
         if (!expected)
             return false;
-        if (TYPEOF(r) == DOTSXP || r == R_DotsSymbol)
-            return false;
     }
 
     std::vector<Value*> copy(givenArgs);
