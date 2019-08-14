@@ -86,7 +86,59 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
         while (ip != bb->end()) {
             auto next = ip + 1;
 
-            if (auto call = Call::Cast(*ip)) {
+            auto flattenDotsArglist = [&](Instruction* i) {
+                std::vector<Value*> args;
+                bool hasNames = false;
+                bool hasDots = false;
+                i->eachArg([&](Value* v) {
+                    if (hasNames)
+                        return;
+                    auto splat = ExpandDots::Cast(v);
+                    if (splat && DotsList::Cast(splat->arg(0).val())) {
+                        auto d = DotsList::Cast(splat->arg(0).val());
+                        hasDots = true;
+                        for (auto n : d->names)
+                            if (n != R_NilValue)
+                                hasNames = true;
+                        d->eachArg([&](Value* v) {
+                            if (auto mk = MkArg::Cast(v)) {
+                                if (mk->isEager()) {
+                                    args.push_back(mk->eagerArg());
+                                } else {
+                                    auto f = new Force(v, i->env());
+                                    ip = bb->insert(ip, f);
+                                    ip++;
+                                    args.push_back(f);
+                                }
+                            } else {
+                                args.push_back(v);
+                            }
+                        });
+                    } else {
+                        args.push_back(v);
+                    }
+                });
+                if (!hasNames && hasDots) {
+                    next = ip + 1;
+                    if (auto b = CallBuiltin::Cast(i)) {
+                        b->clearArgs();
+                        for (auto& a : args)
+                            b->pushArg(a);
+                    } else if (auto b = CallSafeBuiltin::Cast(i)) {
+                        b->clearArgs();
+                        for (auto& a : args)
+                            b->pushArg(a);
+                    } else {
+                        assert(false);
+                    }
+                }
+            };
+
+            if (CallBuiltin::Cast(*ip)) {
+                flattenDotsArglist(*ip);
+            } else if (CallSafeBuiltin::Cast(*ip)) {
+                flattenDotsArglist(*ip);
+            } else if (auto call = Call::Cast(*ip)) {
                 if (auto ldfun = LdFun::Cast(call->cls())) {
                     if (ldfun->hint) {
                         if (TYPEOF(ldfun->hint) == BUILTINSXP) {

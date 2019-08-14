@@ -205,12 +205,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::push_: {
         auto c = bc.immediateConst();
-        if (c == R_UnboundValue)
+        if (c == R_UnboundValue) {
             push(UnboundValue::instance());
-        else if (c == R_MissingArg)
+        } else if (c == R_MissingArg) {
             push(MissingArg::instance());
-        else
+        } else if (c == R_DotsSymbol) {
+            auto d = insert(new LdVar(R_DotsSymbol, insert.env));
+            d->type = RType::dots;
+            push(insert(new ExpandDots(d)));
+        } else {
             push(insert(new LdConst(bc.immediateConst())));
+        }
         break;
     }
 
@@ -373,6 +378,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::call_dots_:
+        return false;
     case Opcode::named_call_:
     case Opcode::call_: {
         long nargs = bc.immediate.callFixedArgs.nargs;
@@ -383,7 +390,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         SEXP monomorphic = nullptr;
         auto callee = at(nargs);
-
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
@@ -918,7 +924,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
-    case Opcode::call_dots_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
     }

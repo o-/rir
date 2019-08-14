@@ -74,7 +74,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
     }
 
-    if (closure->formals().hasDots()) {
+    // Currently dots args are not supported in PIR. Unless if we statically
+    // matched all arguments correctly and are therefore guaranteed to receive a
+    // `...` list as DOTSXP in the correct location, we can support them.
+    // TODO: extend call instruction to do the necessary argument shuffling to
+    // support it in all cases
+    if ( //! ctx.assumptions.includes(Assumption::StaticallyArgmatched) &&
+        closure->formals().hasDots()) {
         closure->rirFunction()->unoptimizable = true;
         logger.warn("no support for ...");
         return fail();
