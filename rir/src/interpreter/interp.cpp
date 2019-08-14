@@ -1463,11 +1463,14 @@ static size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     std::vector<SEXP> names;
     for (size_t i = 0; i < n; ++i) {
         auto arg = ostack_at(ctx, n - i - 1);
-        if (arg != R_DotsSymbol) {
+        auto name = cp_pool_at(ctx, names_[i]);
+        if (name != R_DotsSymbol) {
             args.push_back(arg);
-            names.push_back(cp_pool_at(ctx, names_[i]));
+            names.push_back(name);
         } else {
-            SEXP ellipsis = Rf_findVar(R_DotsSymbol, env);
+            SEXP ellipsis = arg;
+            if (arg == R_DotsSymbol)
+                ellipsis = Rf_findVar(R_DotsSymbol, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     auto arg = CAR(ellipsis);
