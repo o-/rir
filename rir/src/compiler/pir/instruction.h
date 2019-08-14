@@ -636,6 +636,7 @@ class VarLenInstruction
         assert(a);
         args_.push_back(InstrArg(a, t));
     }
+    virtual void clearArgs() { args_.clear(); }
     virtual void pushArg(Value* a) { pushArg(a, a->type); }
     virtual void popArg() {
         assert(args_.size() > 0);
@@ -663,6 +664,11 @@ class VarLenInstructionWithEnvSlot
         Super::pushArg(env, RType::env);
     }
 
+    void clearArgs() override final {
+        auto e = env();
+        args_.clear();
+        Super::pushArg(e, RType::env);
+    }
     void pushArg(Value* a, PirType t) override final {
         assert(a);
         assert(args_.size() > 0);
@@ -1731,7 +1737,7 @@ class CallInstruction {
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
     virtual Closure* tryGetCls() const { return nullptr; }
-    Assumptions inferAvailableAssumptions() const;
+    virtual Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
     ClosureVersion* tryDispatch(Closure*) const;
 };
@@ -1818,6 +1824,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* cls_;
 
   public:
+    Assumptions givenAssumptions;
+
     ClosureVersion* hint = nullptr;
 
     Closure* cls() const { return cls_; }
@@ -1825,7 +1833,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     Closure* tryGetCls() const override final { return cls(); }
 
-    StaticCall(Value * callerEnv, Closure * cls,
+    StaticCall(Value * callerEnv, Closure * cls, Assumptions givenAssumptions,
                const std::vector<Value*>& args, FrameState* fs,
                unsigned srcIdx);
 
@@ -1851,6 +1859,10 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ClosureVersion* tryDispatch() const;
 
     ClosureVersion* tryOptimisticDispatch() const;
+
+    Assumptions inferAvailableAssumptions() const override final {
+        return CallInstruction::inferAvailableAssumptions() | givenAssumptions;
+    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);

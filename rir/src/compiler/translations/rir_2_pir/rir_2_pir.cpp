@@ -588,7 +588,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     popn(toPop);
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f->owner(),
+                    push(insert(new StaticCall(insert.env, f->owner(), given,
                                                matchedArgs, fs, ast)));
                 },
                 insertGenericCall);

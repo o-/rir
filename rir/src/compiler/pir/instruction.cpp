@@ -746,10 +746,11 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
+                       Assumptions givenAssumptions,
                        const std::vector<Value*>& args, FrameState* fs,
                        unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls) {
+      cls_(cls), givenAssumptions(givenAssumptions) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
