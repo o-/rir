@@ -368,17 +368,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (isJumpThrough(bb))
-            return;
-
         order.pop_front();
         cb.add(bbLabels[bb]);
-
-        auto jumpThroughEmpty = [&](BB* bb) {
-            while (isJumpThrough(bb))
-                bb = bb->next();
-            return bb;
-        };
 
         // Only needed for deopt branches
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -1030,8 +1021,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // BB exitting instructions
             case Tag::Branch: {
                 assert(bb->isBranch());
-                auto trueBranch = jumpThroughEmpty(bb->trueBranch());
-                auto falseBranch = jumpThroughEmpty(bb->falseBranch());
+                auto trueBranch = bb->trueBranch();
+                auto falseBranch = bb->falseBranch();
                 if (trueBranch->id == order.front()) {
                     cb.add(BC::brfalse(bbLabels[falseBranch]));
                     cb.add(BC::br(bbLabels[trueBranch]));
@@ -1143,7 +1134,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         // This BB has exactly one successor
         assert(bb->isJmp());
-        auto next = jumpThroughEmpty(bb->next());
+        auto next = bb->next();
         cb.add(BC::br(bbLabels[next]));
     });
 
